@@ -411,27 +411,23 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
         // 6. 키워드 정리
         const userCountryKeywords = userKeywords?.filter(k => k.keyword.category === '국가').map(k => k.keyword.keyword) || [];
-
         const userJobKeywords = userKeywords?.filter(k => k.keyword.category === '직종').map(k => k.keyword.keyword) || [];
         const userConditionKeywords = userKeywords?.filter(k => k.keyword.category === '근무조건').map(k => k.keyword.keyword) || [];
-        const postingJobKeywords = postingKeywords?.filter(k => k.keyword.category === '직종').map(k => k.keyword.keyword) || [];
-        const postingConditionKeywords = postingKeywords?.filter(k => k.keyword.category === '근무조건').map(k => k.keyword.keyword) || [];
 
+// 7. 이력서 생성
+        const resume = `안녕하세요, ${jobPosting.company.name} 채용 담당자님.
+저는 ${userCountryKeywords[0] || '외국'}에서 온 ${userInfo?.age || '00'}살 ${userInfo?.gender || ''} ${userProfile.name || '지원자'}이라고 합니다.
 
-        const resume = `
-            안녕하세요, ${company.name} 채용 담당자님.
-            저는 ${userCountryKeywords}에서 온 ${userInfo.age}살 ${userInfo.gender} ${userInfo.name}이라고 합니다.
-            
-            비자: ${userInfo.visa}
-            희망 근무 기간: ${userInfo.how_long}
-            관련 경력: ${userInfo.experience}
-            경력 내용: ${userInfo.experience.content}
-            한국어 실력: ${userInfo.korean_level}
-            토픽 급수: ${userInfo.topic}
-            희망 근무 조건: ${userConditionKeywords}
-        `
+비자: ${userInfo?.visa || '미입력'}
+희망 근무 기간: ${userInfo?.how_long || '미입력'}
+관련 경력: ${userInfo?.experience || '미입력'}
+한국어 실력: ${userInfo?.korean_level || '미입력'}
+희망 근무 조건: ${userConditionKeywords.join(', ') || '미입력'}
 
-        // 9. 응답
+열심히 일하겠습니다.
+감사합니다.`;
+
+// 8. 응답
         res.json({
             success: true,
             resume: resume,
