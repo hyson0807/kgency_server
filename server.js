@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const { SolapiMessageService } = require('solapi');
 const jwt = require('jsonwebtoken');
+const {createClient} = require("@supabase/supabase-js");
+const {OpenAI} = require("openai");
 const secret = process.env.JWT_SECRET;
 const PORT = process.env.PORT || 5004;
 
