@@ -134,7 +134,7 @@ app.post('/verify-otp', async (req, res) => {
                     throw profileError;
                 }
 
-                if (userType === 'user') {
+                if (testInfo.type === 'user') {
                     // user_info 테이블에 기본 정보 생성
                     const { error: userInfoError } = await supabase
                         .from('user_info')
