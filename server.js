@@ -427,7 +427,7 @@ app.post('/generate-resume-for-posting', async (req, res) => {
             비자: ${userInfo?.visa}
             희망 근무 기간: ${userInfo?.how_long}
             관련 경력: ${userInfo?.experience}
-            경력 내용: ${userInfo?.experience.content}
+            경력 내용: ${userInfo?.experience_content}
             한국어 실력: ${userInfo?.korean_level}
             토픽 급수: ${userInfo?.topic}
             희망 근무 조건: ${userConditionKeywords.join(', ') || '미입력'}
