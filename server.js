@@ -10,7 +10,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { OpenAI } = require("openai");
 
 const PORT = process.env.PORT || 5004;
-const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';  // 기본값 제공
+const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 
 const app = express();
 const otpStore = new Map();
@@ -36,11 +36,55 @@ app.listen(PORT, () => {
     console.log('Environment:', process.env.NODE_ENV || 'development');
 });
 
-// verify-otp 엔드포인트 수정
+// OTP 발송 엔드포인트 - 디버깅 추가
+app.post('/send-otp', async (req, res) => {
+    try {
+        const { phone } = req.body;
+        const otp = generateOTP();
+
+        // OTP 저장 전 로깅
+        console.log('OTP 생성:', {
+            phone: phone,
+            otp: otp,
+            expires: new Date(Date.now() + 300000).toISOString()
+        });
+
+        otpStore.set(phone, { otp, expires: Date.now() + 300000 });
+
+        // 저장된 OTP 확인
+        console.log('현재 저장된 OTP 목록:', Array.from(otpStore.keys()));
+        console.log('저장된 OTP 확인:', otpStore.get(phone));
+
+        const result = await messageService.send({
+            'to': phone,
+            'from': process.env.SENDER_PHONE,
+            'text': `verification: ${otp}`
+        });
+
+        console.log('SMS 발송 성공:', result);
+        res.json({ success: true });
+
+    } catch (error) {
+        console.error('OTP 발송 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// OTP 검증 엔드포인트 - 개선된 디버깅
 app.post('/verify-otp', async (req, res) => {
     try {
         const { phone, otp, userType } = req.body;
         console.log('OTP 검증 시작:', { phone, otp, userType });
+
+        // 현재 저장된 모든 OTP 확인
+        console.log('현재 저장된 OTP 키들:', Array.from(otpStore.keys()));
+        console.log('OTP Store 전체 내용:');
+        otpStore.forEach((value, key) => {
+            console.log(`  키: ${key}, 값:`, value);
+        });
 
         // 개발 모드 테스트 계정 (OTP: 123456)
         const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -51,8 +95,8 @@ app.post('/verify-otp', async (req, res) => {
         };
 
         if (isDevelopment && isTestOTP && testAccounts[phone]) {
-            // 테스트 계정 처리
-            console.log('테스트 계정 로그인:', phone);
+            console.log('테스트 계정 로그인 시도:', phone);
+            // ... 테스트 계정 처리 로직 (이전과 동일)
 
             // 기존 유저 확인
             const { data: existingUser, error: fetchError } = await supabase
@@ -118,8 +162,7 @@ app.post('/verify-otp', async (req, res) => {
                     throw profileError;
                 }
 
-                // user 타입인 경우에만 user_info 생성
-                if (testInfo.type === 'user') {  // userType이 아닌 testInfo.type 확인
+                if (testInfo.type === 'user') {
                     const { error: userInfoError } = await supabase
                         .from('user_info')
                         .insert({
@@ -160,16 +203,32 @@ app.post('/verify-otp', async (req, res) => {
 
         // 일반 OTP 확인
         const stored = otpStore.get(phone);
+        console.log('조회된 OTP 정보:', stored);
+
         if (!stored) {
             console.error('OTP를 찾을 수 없음:', phone);
+
+            // 디버깅: 비슷한 키가 있는지 확인
+            const similarKeys = Array.from(otpStore.keys()).filter(key =>
+                key.includes(phone.slice(-8)) || phone.includes(key.slice(-8))
+            );
+            if (similarKeys.length > 0) {
+                console.log('비슷한 전화번호 키들:', similarKeys);
+            }
+
             return res.status(400).json({
                 success: false,
-                error: 'OTP를 찾을 수 없습니다'
+                error: 'OTP를 찾을 수 없습니다. OTP를 다시 요청해주세요.'
             });
         }
 
         // 만료 시간 확인
-        if (Date.now() > stored.expires) {
+        const now = Date.now();
+        if (now > stored.expires) {
+            console.log('OTP 만료됨:', {
+                현재시간: new Date(now).toISOString(),
+                만료시간: new Date(stored.expires).toISOString()
+            });
             otpStore.delete(phone);
             return res.status(400).json({
                 success: false,
@@ -179,15 +238,21 @@ app.post('/verify-otp', async (req, res) => {
 
         // OTP 일치 확인
         if (stored.otp !== otp) {
+            console.log('OTP 불일치:', {
+                입력된OTP: otp,
+                저장된OTP: stored.otp
+            });
             return res.status(400).json({
                 success: false,
                 error: '잘못된 인증번호입니다'
             });
         }
 
+        console.log('OTP 검증 성공, 삭제 처리');
         // OTP 삭제 (한 번만 사용 가능)
         otpStore.delete(phone);
 
+        // 이후 로직은 동일...
         // 기존 유저 확인
         const { data: existingUser, error: fetchError } = await supabase
             .from('profiles')
@@ -199,7 +264,6 @@ app.post('/verify-otp', async (req, res) => {
         let userData;
         let onboardingStatus;
 
-        // 에러가 있지만 단순히 유저가 없는 경우가 아닌 경우 처리
         if (fetchError && fetchError.code !== 'PGRST116') {
             console.error('유저 조회 오류:', fetchError);
             throw fetchError;
@@ -230,7 +294,6 @@ app.post('/verify-otp', async (req, res) => {
             // 신규 유저 - 회원가입 처리
             console.log('신규 유저 회원가입');
 
-            // userType이 제공되지 않은 경우 체크
             if (!userType) {
                 return res.status(400).json({
                     success: false,
@@ -238,7 +301,6 @@ app.post('/verify-otp', async (req, res) => {
                 });
             }
 
-            // Supabase Auth에 유저 생성
             const { data: authData, error: authError } = await supabase.auth.admin.createUser({
                 phone: phone,
                 phone_confirm: true
@@ -249,7 +311,6 @@ app.post('/verify-otp', async (req, res) => {
                 throw authError;
             }
 
-            // profiles 테이블에 추가 정보 저장
             const { error: profileError } = await supabase
                 .from('profiles')
                 .insert({
@@ -261,12 +322,10 @@ app.post('/verify-otp', async (req, res) => {
 
             if (profileError) {
                 console.error('프로필 생성 오류:', profileError);
-                // 프로필 생성 실패 시 auth 유저도 삭제 (롤백)
                 await supabase.auth.admin.deleteUser(authData.user.id);
                 throw profileError;
             }
 
-            // user 타입인 경우에만 user_info 생성
             if (userType === 'user') {
                 const { error: userInfoError } = await supabase
                     .from('user_info')
@@ -279,7 +338,6 @@ app.post('/verify-otp', async (req, res) => {
                 }
             }
 
-            // JWT 토큰 생성
             token = jwt.sign({
                 userId: authData.user.id,
                 phone: phone,
@@ -298,7 +356,6 @@ app.post('/verify-otp', async (req, res) => {
             };
         }
 
-        // 성공 응답
         console.log('인증 성공:', userData.userId);
         console.log('온보딩 완료 여부:', onboardingStatus.completed);
 
@@ -313,7 +370,6 @@ app.post('/verify-otp', async (req, res) => {
     } catch (error) {
         console.error('OTP 검증 실패:', error);
 
-        // 에러 타입에 따른 응답
         if (error.message?.includes('duplicate key')) {
             res.status(400).json({
                 success: false,
@@ -328,3 +384,19 @@ app.post('/verify-otp', async (req, res) => {
         }
     }
 });
+
+// 디버깅용 엔드포인트 추가 (개발 환경에서만)
+if (process.env.NODE_ENV !== 'production') {
+    app.get('/debug/otp-list', (req, res) => {
+        const otpList = [];
+        otpStore.forEach((value, key) => {
+            otpList.push({
+                phone: key,
+                otp: value.otp,
+                expires: new Date(value.expires).toISOString(),
+                remainingTime: Math.max(0, Math.floor((value.expires - Date.now()) / 1000)) + '초'
+            });
+        });
+        res.json({ count: otpList.length, otps: otpList });
+    });
+}
