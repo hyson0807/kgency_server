@@ -1,60 +1,46 @@
 const express = require('express');
 const dotenv = require('dotenv');
+// dotenv를 가장 먼저 로드
+dotenv.config();
+
 const cors = require('cors');
 const { SolapiMessageService } = require('solapi');
 const jwt = require('jsonwebtoken');
-const {createClient} = require("@supabase/supabase-js");
-const {OpenAI} = require("openai");
-const secret = process.env.JWT_SECRET;
+const { createClient } = require("@supabase/supabase-js");
+const { OpenAI } = require("openai");
+
 const PORT = process.env.PORT || 5004;
+const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';  // 기본값 제공
 
 const app = express();
 const otpStore = new Map();
 
+// 환경 변수 검증
+if (!process.env.KEY_1 || !process.env.KEY_2) {
+    console.error('Supabase keys are missing!');
+}
+
 const supabase = createClient(process.env.KEY_1, process.env.KEY_2);
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const messageService = new SolapiMessageService(process.env.SOLAPI_API_KEY, process.env.SOLAPI_API_SECRET);
 
 app.use(cors());
 app.use(express.json());
-dotenv.config();
 
-function generateOTP() { return Math.floor(100000 + Math.random() * 900000).toString(); }
+function generateOTP() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 app.listen(PORT, () => {
     console.log(`Listening on ${PORT}`);
+    console.log('Environment:', process.env.NODE_ENV || 'development');
 });
 
-//---------------------------------------------------------------------------------------------
-
-app.post('/send-otp', async (req, res) => {
-    try {
-        const { phone } = req.body;
-        const otp = generateOTP();
-        otpStore.set(phone, { otp, expires: Date.now() + 300000 });
-        console.log('생성된 OTP:', otp);
-
-        const result = await messageService.send({
-            'to': phone,
-            'from': process.env.SENDER_PHONE,
-            'text': `verification: ${otp}`
-        })
-        console.log('SMS 발송 성공:', result);
-        res.json({ success: true});
-
-    }  catch (error) {
-        console.error('OTP 발송 실패:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-})
-
+// verify-otp 엔드포인트 수정
 app.post('/verify-otp', async (req, res) => {
     try {
         const { phone, otp, userType } = req.body;
-        console.log('OTP 검증11111111:', phone, otp, userType);
+        console.log('OTP 검증 시작:', { phone, otp, userType });
 
         // 개발 모드 테스트 계정 (OTP: 123456)
         const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -76,6 +62,7 @@ app.post('/verify-otp', async (req, res) => {
                 .single();
 
             if (fetchError && fetchError.code !== 'PGRST116') {
+                console.error('기존 유저 확인 오류:', fetchError);
                 throw fetchError;
             }
 
@@ -89,7 +76,7 @@ app.post('/verify-otp', async (req, res) => {
                     userId: existingUser.id,
                     phone: phone,
                     userType: existingUser.user_type
-                }, process.env.JWT_SECRET || 'test-secret', { expiresIn: '7d' });
+                }, JWT_SECRET, { expiresIn: '7d' });
 
                 userData = {
                     userId: existingUser.id,
@@ -110,7 +97,10 @@ app.post('/verify-otp', async (req, res) => {
                     phone_confirm: true
                 });
 
-                if (authError) throw authError;
+                if (authError) {
+                    console.error('Auth 유저 생성 오류:', authError);
+                    throw authError;
+                }
 
                 const { error: profileError } = await supabase
                     .from('profiles')
@@ -123,23 +113,21 @@ app.post('/verify-otp', async (req, res) => {
                     });
 
                 if (profileError) {
+                    console.error('프로필 생성 오류:', profileError);
                     await supabase.auth.admin.deleteUser(authData.user.id);
                     throw profileError;
                 }
 
-                if (userType === 'user') {
-                    // user_info 테이블에 기본 정보 생성
+                // user 타입인 경우에만 user_info 생성
+                if (testInfo.type === 'user') {  // userType이 아닌 testInfo.type 확인
                     const { error: userInfoError } = await supabase
                         .from('user_info')
                         .insert({
-                            user_id: authData.user.id,
-                            // 기본값들은 DB 스키마에 정의되어 있음
+                            user_id: authData.user.id
                         });
 
                     if (userInfoError) {
                         console.error('user_info 생성 실패:', userInfoError);
-                        // user_info 생성 실패해도 회원가입은 계속 진행
-                        // 나중에 프로필 업데이트 시 생성될 수 있음
                     }
                 }
 
@@ -147,7 +135,7 @@ app.post('/verify-otp', async (req, res) => {
                     userId: authData.user.id,
                     phone: phone,
                     userType: testInfo.type
-                }, process.env.JWT_SECRET || 'test-secret', { expiresIn: '7d' });
+                }, JWT_SECRET, { expiresIn: '7d' });
 
                 userData = {
                     userId: authData.user.id,
@@ -173,11 +161,13 @@ app.post('/verify-otp', async (req, res) => {
         // 일반 OTP 확인
         const stored = otpStore.get(phone);
         if (!stored) {
+            console.error('OTP를 찾을 수 없음:', phone);
             return res.status(400).json({
                 success: false,
                 error: 'OTP를 찾을 수 없습니다'
             });
         }
+
         // 만료 시간 확인
         if (Date.now() > stored.expires) {
             otpStore.delete(phone);
@@ -186,6 +176,7 @@ app.post('/verify-otp', async (req, res) => {
                 error: 'OTP가 만료되었습니다'
             });
         }
+
         // OTP 일치 확인
         if (stored.otp !== otp) {
             return res.status(400).json({
@@ -193,6 +184,7 @@ app.post('/verify-otp', async (req, res) => {
                 error: '잘못된 인증번호입니다'
             });
         }
+
         // OTP 삭제 (한 번만 사용 가능)
         otpStore.delete(phone);
 
@@ -209,6 +201,7 @@ app.post('/verify-otp', async (req, res) => {
 
         // 에러가 있지만 단순히 유저가 없는 경우가 아닌 경우 처리
         if (fetchError && fetchError.code !== 'PGRST116') {
+            console.error('유저 조회 오류:', fetchError);
             throw fetchError;
         }
 
@@ -220,7 +213,7 @@ app.post('/verify-otp', async (req, res) => {
                 userId: existingUser.id,
                 phone: phone,
                 userType: existingUser.user_type
-            }, process.env.JWT_SECRET || 'test-secret', { expiresIn: '7d' });
+            }, JWT_SECRET, { expiresIn: '7d' });
 
             userData = {
                 userId: existingUser.id,
@@ -229,7 +222,6 @@ app.post('/verify-otp', async (req, res) => {
                 isNewUser: false
             };
 
-            // 온보딩 상태는 profiles 테이블에서 바로 확인
             onboardingStatus = {
                 completed: existingUser.onboarding_completed || false
             };
@@ -253,33 +245,38 @@ app.post('/verify-otp', async (req, res) => {
             });
 
             if (authError) {
+                console.error('Auth 유저 생성 오류:', authError);
                 throw authError;
             }
 
-            // profiles 테이블에 추가 정보 저장 (onboarding_completed는 기본값 false)
+            // profiles 테이블에 추가 정보 저장
             const { error: profileError } = await supabase
                 .from('profiles')
                 .insert({
                     id: authData.user.id,
                     phone_number: phone,
                     user_type: userType,
-                    onboarding_completed: false  // 명시적으로 false 설정
+                    onboarding_completed: false
                 });
 
             if (profileError) {
+                console.error('프로필 생성 오류:', profileError);
                 // 프로필 생성 실패 시 auth 유저도 삭제 (롤백)
                 await supabase.auth.admin.deleteUser(authData.user.id);
                 throw profileError;
             }
 
+            // user 타입인 경우에만 user_info 생성
             if (userType === 'user') {
-                // user_info 테이블에 기본 정보 생성
                 const { error: userInfoError } = await supabase
                     .from('user_info')
                     .insert({
-                        user_id: authData.user.id,
-                        // 기본값들은 DB 스키마에 정의되어 있음
+                        user_id: authData.user.id
                     });
+
+                if (userInfoError) {
+                    console.error('user_info 생성 실패:', userInfoError);
+                }
             }
 
             // JWT 토큰 생성
@@ -287,7 +284,7 @@ app.post('/verify-otp', async (req, res) => {
                 userId: authData.user.id,
                 phone: phone,
                 userType: userType
-            }, process.env.JWT_SECRET || 'test-secret', { expiresIn: '7d' });
+            }, JWT_SECRET, { expiresIn: '7d' });
 
             userData = {
                 userId: authData.user.id,
@@ -296,7 +293,6 @@ app.post('/verify-otp', async (req, res) => {
                 isNewUser: true
             };
 
-            // 신규 유저는 무조건 온보딩 미완료
             onboardingStatus = {
                 completed: false
             };
@@ -326,135 +322,9 @@ app.post('/verify-otp', async (req, res) => {
         } else {
             res.status(500).json({
                 success: false,
-                error: '인증 처리 중 오류가 발생했습니다'
+                error: '인증 처리 중 오류가 발생했습니다',
+                details: process.env.NODE_ENV !== 'production' ? error.message : undefined
             });
         }
     }
 });
-
-// AI 이력서 생성 엔드포인트 (공고별)
-app.post('/generate-resume-for-posting', async (req, res) => {
-    try {
-        const { user_id, job_posting_id, company_id, question } = req.body;
-
-        if (!user_id || !job_posting_id || !company_id) {
-            return res.status(400).json({
-                success: false,
-                error: '필수 정보가 누락되었습니다.'
-            });
-        }
-
-        // 1. 유저 프로필 정보 가져오기
-        const { data: userProfile, error: userError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user_id)
-            .single();
-
-        if (userError || !userProfile) {
-            return res.status(404).json({
-                success: false,
-                error: '유저 정보를 찾을 수 없습니다.'
-            });
-        }
-
-        // 2. user_info 테이블에서 추가 정보 가져오기
-        const { data: userInfo } = await supabase
-            .from('user_info')
-            .select('*')
-            .eq('user_id', user_id)
-            .single();
-
-        // 3. 유저 키워드 정보 가져오기
-        const { data: userKeywords } = await supabase
-            .from('user_keyword')
-            .select(`
-                keyword:keyword_id (
-                    keyword,
-                    category
-                )
-            `)
-            .eq('user_id', user_id);
-
-        // 4. 공고 정보 가져오기
-        const { data: jobPosting, error: postingError } = await supabase
-            .from('job_postings')
-            .select(`
-                *,
-                company:company_id (
-                    name,
-                    address,
-                    description
-                )
-            `)
-            .eq('id', job_posting_id)
-            .single();
-
-        if (postingError || !jobPosting) {
-            return res.status(404).json({
-                success: false,
-                error: '공고 정보를 찾을 수 없습니다.'
-            });
-        }
-
-        // 5. 공고 키워드 정보 가져오기
-        const { data: postingKeywords } = await supabase
-            .from('job_posting_keyword')
-            .select(`
-                keyword:keyword_id (
-                    keyword,
-                    category
-                )
-            `)
-            .eq('job_posting_id', job_posting_id);
-
-        console.log(123);
-
-        // 6. 키워드 정리
-        const userCountryKeywords = userKeywords?.filter(k => k.keyword.category === '국가').map(k => k.keyword.keyword) || [];
-
-        const userJobKeywords = userKeywords?.filter(k => k.keyword.category === '직종').map(k => k.keyword.keyword) || [];
-        const userConditionKeywords = userKeywords?.filter(k => k.keyword.category === '근무조건').map(k => k.keyword.keyword) || [];
-        const postingJobKeywords = postingKeywords?.filter(k => k.keyword.category === '직종').map(k => k.keyword.keyword) || [];
-        const postingConditionKeywords = postingKeywords?.filter(k => k.keyword.category === '근무조건').map(k => k.keyword.keyword) || [];
-
-        console.log(1234);
-
-        const resume = `
-안녕하세요!, ${jobPosting.company.name} 채용 담당자님!
-저는 케이전시 ${jobPosting.title}를 보고 지원한 ${userProfile.name || ''}입니다. 
-
-국가: ${userCountryKeywords}
-비자: ${userInfo?.visa}
-나이: ${userInfo.age} (${userInfo.gender})
-희망 근무 기간: ${userInfo?.how_long}
-관련 경력: ${userInfo?.experience}
-경력 내용: ${userInfo?.experience_content}
-한국어 실력: ${userInfo?.korean_level}  토픽 급수: ${userInfo?.topic}
-궁금한 점: ${question}
-
-저는 진심으로 ${jobPosting.company.name} 팀과 면접보고 싶어서 인사 드립니다.
-가능한 시간 알려주시면 감사하겠습니다!
-        `
-
-
-        console.log(12345);
-
-        // 9. 응답
-        res.json({
-            success: true,
-            resume: resume,
-            jobTitle: jobPosting.title,
-            companyName: jobPosting.company.name
-        });
-
-    } catch (error) {
-        console.error('이력서 생성 오류:', error);
-        res.status(500).json({
-            success: false,
-            error: '이력서 생성 중 오류가 발생했습니다.',
-            details: error.message
-        });
-    }
-});
-
