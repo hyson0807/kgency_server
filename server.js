@@ -335,7 +335,7 @@ app.post('/verify-otp', async (req, res) => {
 // AI 이력서 생성 엔드포인트 (공고별)
 app.post('/generate-resume-for-posting', async (req, res) => {
     try {
-        const { user_id, job_posting_id, company_id } = req.body;
+        const { user_id, job_posting_id, company_id, question } = req.body;
 
         if (!user_id || !job_posting_id || !company_id) {
             return res.status(400).json({
@@ -421,16 +421,20 @@ app.post('/generate-resume-for-posting', async (req, res) => {
         console.log(1234);
 
         const resume = `
-            안녕하세요, ${jobPosting.company.name} 채용 담당자님.
-            저는 ${userCountryKeywords}에서 온 ${userInfo.age}살 ${userInfo.gender} ${userProfile.name || ''}이라고 합니다.
-            
-            비자: ${userInfo?.visa}
-            희망 근무 기간: ${userInfo?.how_long}
-            관련 경력: ${userInfo?.experience}
-            경력 내용: ${userInfo?.experience_content}
-            한국어 실력: ${userInfo?.korean_level}
-            토픽 급수: ${userInfo?.topic}
-            희망 근무 조건: ${userConditionKeywords.join(', ') || '미입력'}
+    안녕하세요!, ${jobPosting.company.name} 채용 담당자님!
+    저는 케이전시 ${jobPosting.title}를 보고 지원한 ${userProfile.name || ''}입니다. 
+    
+    국가: ${userCountryKeywords}
+    비자: ${userInfo?.visa}
+    나이: ${userInfo.age} (${userInfo.gender})
+    희망 근무 기간: ${userInfo?.how_long}
+    관련 경력: ${userInfo?.experience}
+    경력 내용: ${userInfo?.experience_content}
+    한국어 실력: ${userInfo?.korean_level}  토픽 급수: ${userInfo?.topic}
+    궁금한 점: {question}
+    
+    저는 진심으로 ${jobPosting.company.name} 팀과 면접보고 싶어서 인사 드립니다.
+    가능한 시간 알려주시면 감사하겠습니다!
         `
 
 
