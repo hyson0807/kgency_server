@@ -460,7 +460,7 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 희망 근무 기간: ${userInfo?.how_long}
 관련 경력: ${userInfo?.experience}
 경력 내용: ${userInfo?.experience_content}
-한국어 실력: ${userInfo?.korean_level}  토픽 급수: ${userInfo?.topic}
+한국어 실력: ${userInfo?.korean_level}  토픽 급수: ${userInfo?.topic || 'x'}
 궁금한 점: ${question}
 
 저는 진심으로 ${jobPosting.company.name} 팀과 면접보고 싶어서 인사 드립니다.
