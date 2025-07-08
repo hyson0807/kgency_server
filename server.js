@@ -366,56 +366,25 @@ app.post('/verify-otp', async (req, res) => {
 // 회원 탈퇴 엔드포인트
 app.delete('/delete-account', async (req, res) => {
     try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            return res.status(401).json({
-                success: false,
-                error: '인증이 필요합니다'
-            });
+        const token = req.headers.authorization?.replace('Bearer ', '');
+        if (!token) {
+            return res.status(401).json({ success: false, error: '인증 필요' });
         }
 
-        const token = authHeader.replace('Bearer ', '');
-
-        // JWT 토큰 검증
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'test-secret');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const userId = decoded.userId;
 
-        if (!userId) {
-            return res.status(400).json({
-                success: false,
-                error: '유효하지 않은 사용자입니다'
-            });
-        }
-
-        // Supabase Admin으로 유저 삭제 (CASCADE로 관련 데이터 자동 삭제)
+        // CASCADE 설정이 되어있다면 auth.users만 삭제해도 됨
         const { error } = await supabase.auth.admin.deleteUser(userId);
 
-        if (error) {
-            console.error('회원 탈퇴 오류:', error);
-            return res.status(500).json({
-                success: false,
-                error: '회원 탈퇴 처리 중 오류가 발생했습니다'
-            });
-        }
+        if (error) throw error;
 
-        res.json({
-            success: true,
-            message: '회원 탈퇴가 완료되었습니다'
-        });
-
+        res.json({ success: true, message: '회원 탈퇴 완료' });
     } catch (error) {
         console.error('회원 탈퇴 실패:', error);
-
-        if (error.name === 'JsonWebTokenError') {
-            return res.status(401).json({
-                success: false,
-                error: '유효하지 않은 토큰입니다'
-            });
-        }
-
         res.status(500).json({
             success: false,
-            error: '회원 탈퇴 처리 중 오류가 발생했습니다'
+            error: '회원 탈퇴 처리 중 오류가 발생했습니다.'
         });
     }
 });
