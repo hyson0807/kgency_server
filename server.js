@@ -95,13 +95,13 @@ app.post('/verify-otp', async (req, res) => {
                 token = jwt.sign({
                     userId: existingUser.id,
                     phone: phone,
-                    userType: existingUser.user_type
+                    userType: testAccounts[phone].type
                 }, process.env.JWT_SECRET || 'test-secret', { expiresIn: '7d' });
 
                 userData = {
                     userId: existingUser.id,
                     phone: phone,
-                    userType: existingUser.user_type,
+                    userType: testAccounts[phone].type,
                     isNewUser: false
                 };
 
