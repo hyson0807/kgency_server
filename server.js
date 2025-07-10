@@ -393,7 +393,7 @@ app.delete('/delete-account', async (req, res) => {
 // AI 이력서 생성 엔드포인트 (공고별)
 app.post('/generate-resume-for-posting', async (req, res) => {
     try {
-        const { user_id, job_posting_id, company_id, question } = req.body;
+        const { user_id, job_posting_id, company_id, question, selectedDays, daysNegotiable, selectedTimes, timesNegotiable } = req.body;
 
         if (!user_id || !job_posting_id || !company_id) {
             return res.status(400).json({
@@ -476,7 +476,31 @@ app.post('/generate-resume-for-posting', async (req, res) => {
         const postingJobKeywords = postingKeywords?.filter(k => k.keyword.category === '직종').map(k => k.keyword.keyword) || [];
         const postingConditionKeywords = postingKeywords?.filter(k => k.keyword.category === '근무조건').map(k => k.keyword.keyword) || [];
 
-        console.log(1234);
+        // 희망 근무 요일 문자열 생성
+        let workDaysText = '';
+        if (daysArray.length > 0) {
+            workDaysText = daysArray.join(', ');
+            if (daysNegotiable) {
+                workDaysText += ' (협의가능)';
+            }
+        } else if (daysNegotiable) {
+            workDaysText = '협의가능';
+        } else {
+            workDaysText = '없음';
+        }
+
+// 희망 시간대 문자열 생성
+        let workTimesText = '';
+        if (timesArray.length > 0) {
+            workTimesText = timesArray.join(', ');
+            if (timesNegotiable) {
+                workTimesText += ' (협의가능)';
+            }
+        } else if (timesNegotiable) {
+            workTimesText = '협의가능';
+        } else {
+            workTimesText = '없음';
+        }
 
         const resume = `
 안녕하세요!, ${jobPosting.company.name} 채용 담당자님!
@@ -486,6 +510,8 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 비자: ${userInfo?.visa}
 나이: ${userInfo.age} (${userInfo.gender})
 희망 근무 기간: ${userInfo?.how_long}
+희망 근무 요일: ${workDaysText}
+희망 시간대: ${workTimesText}
 관련 경력: ${userInfo?.experience}
 경력 내용: ${userInfo?.experience_content}
 한국어 실력: ${userInfo?.korean_level}  토픽 급수: ${userInfo?.topic || 'x'}
@@ -493,7 +519,7 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
 저는 진심으로 ${jobPosting.company.name} 팀과 면접보고 싶어서 인사 드립니다.
 가능한 시간 알려주시면 감사하겠습니다!
-        `
+`
 
 
         console.log(12345);
