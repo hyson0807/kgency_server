@@ -393,13 +393,7 @@ app.delete('/delete-account', async (req, res) => {
 // AI 이력서 생성 엔드포인트 (공고별)
 app.post('/generate-resume-for-posting', async (req, res) => {
     try {
-        console.log('받은 데이터:', req.body);
-        console.log('selectedDays 타입:', typeof selectedDays);
-        console.log('selectedDays 값:', selectedDays);
-        console.log('selectedTimes 타입:', typeof selectedTimes);
-        console.log('selectedTimes 값:', selectedTimes);
-
-        const { user_id, job_posting_id, company_id, question, selectedDays, daysNegotiable, selectedTimes, timesNegotiable } = req.body;
+        const { user_id, job_posting_id, company_id, question } = req.body;
 
         if (!user_id || !job_posting_id || !company_id) {
             return res.status(400).json({
@@ -482,45 +476,7 @@ app.post('/generate-resume-for-posting', async (req, res) => {
         const postingJobKeywords = postingKeywords?.filter(k => k.keyword.category === '직종').map(k => k.keyword.keyword) || [];
         const postingConditionKeywords = postingKeywords?.filter(k => k.keyword.category === '근무조건').map(k => k.keyword.keyword) || [];
 
-        // 배열 확인 및 변환 함수
-        const toArray = (value) => {
-            if (!value) return [];
-            if (Array.isArray(value)) return value;
-            if (typeof value === 'string') {
-                return value.split(',').map(item => item.trim()).filter(item => item);
-            }
-            return [];
-        };
-
-// 희망 근무 요일 문자열 생성
-        let workDaysText = '';
-        const daysArray = toArray(selectedDays);
-
-        if (daysArray.length > 0) {
-            workDaysText = daysArray.join(', ');
-            if (daysNegotiable) {
-                workDaysText += ' (협의가능)';
-            }
-        } else if (daysNegotiable) {
-            workDaysText = '협의가능';
-        } else {
-            workDaysText = '없음';
-        }
-
-// 희망 시간대 문자열 생성
-        let workTimesText = '';
-        const timesArray = toArray(selectedTimes);
-
-        if (timesArray.length > 0) {
-            workTimesText = timesArray.join(', ');
-            if (timesNegotiable) {
-                workTimesText += ' (협의가능)';
-            }
-        } else if (timesNegotiable) {
-            workTimesText = '협의가능';
-        } else {
-            workTimesText = '없음';
-        }
+        console.log(1234);
 
         const resume = `
 안녕하세요!, ${jobPosting.company.name} 채용 담당자님!
@@ -528,10 +484,8 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
 국가: ${userCountryKeywords}
 비자: ${userInfo?.visa}
-나이: ${userInfo?.age} (${userInfo?.gender})
+나이: ${userInfo.age} (${userInfo.gender})
 희망 근무 기간: ${userInfo?.how_long}
-희망 근무 요일: ${workDaysText}
-희망 시간대: ${workTimesText}
 관련 경력: ${userInfo?.experience}
 경력 내용: ${userInfo?.experience_content}
 한국어 실력: ${userInfo?.korean_level}  토픽 급수: ${userInfo?.topic || 'x'}
@@ -539,7 +493,7 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
 저는 진심으로 ${jobPosting.company.name} 팀과 면접보고 싶어서 인사 드립니다.
 가능한 시간 알려주시면 감사하겠습니다!
-`
+        `
 
 
         console.log(12345);
@@ -620,53 +574,6 @@ app.post('/translate', async (req, res) => {
             success: false,
             error: '번역 중 오류가 발생했습니다.',
             details: error.message
-        });
-    }
-});
-
-// 배치 번역 엔드포인트 (여러 텍스트 한번에)
-app.post('/translate-batch', async (req, res) => {
-    try {
-        const { texts, targetLang } = req.body;
-
-        if (!texts || !Array.isArray(texts) || texts.length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: '번역할 텍스트 배열을 입력해주세요.'
-            });
-        }
-
-        const translations = await Promise.all(
-            texts.map(async (item) => {
-                const cacheKey = `${item.text}_${targetLang}`;
-
-                if (translationCache.has(cacheKey)) {
-                    return {
-                        ...item,
-                        translatedText: translationCache.get(cacheKey)
-                    };
-                }
-
-                const [translation] = await translate.translate(item.text, targetLang);
-                translationCache.set(cacheKey, translation);
-
-                return {
-                    ...item,
-                    translatedText: translation
-                };
-            })
-        );
-
-        res.json({
-            success: true,
-            translations
-        });
-
-    } catch (error) {
-        console.error('배치 번역 오류:', error);
-        res.status(500).json({
-            success: false,
-            error: '번역 중 오류가 발생했습니다.'
         });
     }
 });
