@@ -478,8 +478,8 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
         // 희망 근무 요일 문자열 생성
         let workDaysText = '';
-        if (daysArray.length > 0) {
-            workDaysText = daysArray.join(', ');
+        if (selectedDays && selectedDays.length > 0) {
+            workDaysText = selectedDays.join(', ');
             if (daysNegotiable) {
                 workDaysText += ' (협의가능)';
             }
@@ -491,8 +491,8 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
 // 희망 시간대 문자열 생성
         let workTimesText = '';
-        if (timesArray.length > 0) {
-            workTimesText = timesArray.join(', ');
+        if (selectedTimes && selectedTimes.length > 0) {
+            workTimesText = selectedTimes.join(', ');
             if (timesNegotiable) {
                 workTimesText += ' (협의가능)';
             }
