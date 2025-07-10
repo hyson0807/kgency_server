@@ -393,7 +393,7 @@ app.delete('/delete-account', async (req, res) => {
 // AI 이력서 생성 엔드포인트 (공고별)
 app.post('/generate-resume-for-posting', async (req, res) => {
     try {
-        const { user_id, job_posting_id, company_id, question } = req.body;
+        const { user_id, job_posting_id, company_id, question, workDaysString, workTimesString } = req.body;
 
         if (!user_id || !job_posting_id || !company_id) {
             return res.status(400).json({
@@ -478,18 +478,20 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
         console.log(1234);
 
-        const resume = `
+        onst resume = `
 안녕하세요!, ${jobPosting.company.name} 채용 담당자님!
 저는 케이전시 ${jobPosting.title}를 보고 지원한 ${userProfile.name || ''}입니다. 
 
 국가: ${userCountryKeywords}
-비자: ${userInfo?.visa}
-나이: ${userInfo.age} (${userInfo.gender})
-희망 근무 기간: ${userInfo?.how_long}
-관련 경력: ${userInfo?.experience}
-경력 내용: ${userInfo?.experience_content}
-한국어 실력: ${userInfo?.korean_level}  토픽 급수: ${userInfo?.topic || 'x'}
-궁금한 점: ${question}
+비자: ${userInfo?.visa || '정보 없음'}
+나이: ${userInfo?.age || '정보 없음'} (${userInfo?.gender || '정보 없음'})
+희망 근무 기간: ${userInfo?.how_long || '정보 없음'}
+희망 근무 요일: ${workDaysString || '없음'}
+희망 시간대: ${workTimesString || '없음'}
+관련 경력: ${userInfo?.experience || '정보 없음'}
+경력 내용: ${userInfo?.experience_content || '정보 없음'}
+한국어 실력: ${userInfo?.korean_level || '정보 없음'}  토픽 급수: ${userInfo?.topic || 'x'}
+궁금한 점: ${question || '없음'}
 
 저는 진심으로 ${jobPosting.company.name} 팀과 면접보고 싶어서 인사 드립니다.
 가능한 시간 알려주시면 감사하겠습니다!
