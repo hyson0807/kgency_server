@@ -13,6 +13,7 @@
   "type": "commonjs",
   "description": "",
   "dependencies": {
+    "@google-cloud/translate": "^9.1.0",
     "@supabase/supabase-js": "^2.50.3",
     "axios": "^1.10.0",
     "cors": "^2.8.5",

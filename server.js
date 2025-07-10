@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const OpenAI = require('openai');
+const jwt = require('jsonwebtoken');const { Translate } = require('@google-cloud/translate').v2;
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -16,7 +17,7 @@ const { SolapiMessageService } = require('solapi');
 const res = require("express/lib/response");
 const messageService = new SolapiMessageService(process.env.SOLAPI_API_KEY, process.env.SOLAPI_API_SECRET);
 const otpStore = new Map();
-const jwt = require('jsonwebtoken');
+const translate = new Translate({ key: process.env.GOOGLE_TRANSLATE_API_KEY });
 
 
 const openai = new OpenAI({
@@ -514,6 +515,73 @@ app.post('/generate-resume-for-posting', async (req, res) => {
         });
     }
 });
+
+
+const translationCache = new Map();
+app.post('/translate', async (req, res) => {
+    try {
+        const { text, targetLang, sourceTable, sourceColumn, sourceId } = req.body;
+
+        if (!text || !targetLang) {
+            return res.status(400).json({
+                success: false,
+                error: '번역할 텍스트와 대상 언어를 입력해주세요.'
+            });
+        }
+
+        // 캐시 키 생성
+        const cacheKey = `${text}_${targetLang}`;
+
+        // 캐시 확인
+        if (translationCache.has(cacheKey)) {
+            return res.json({
+                success: true,
+                translatedText: translationCache.get(cacheKey),
+                fromCache: true
+            });
+        }
+
+        // Google Translate API 호출
+        const [translation] = await translate.translate(text, targetLang);
+
+        // 캐시에 저장
+        translationCache.set(cacheKey, translation);
+
+        // DB에 번역 저장 (선택사항)
+        // if (sourceTable && sourceColumn && sourceId) {
+        //     await supabase
+        //         .from('translations')
+        //         .upsert({
+        //             table_name: sourceTable,
+        //             column_name: sourceColumn,
+        //             row_id: sourceId,
+        //             locale: targetLang,
+        //             translated_text: translation
+        //         }, {
+        //             onConflict: 'table_name,column_name,row_id,locale'
+        //         });
+        // }
+
+        res.json({
+            success: true,
+            translatedText: translation,
+            fromCache: false
+        });
+
+    } catch (error) {
+        console.error('번역 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: '번역 중 오류가 발생했습니다.',
+            details: error.message
+        });
+    }
+});
+
+
+
+
+
 
 // 헬스 체크 엔드포인트
 app.get('/health', (req, res) => {
