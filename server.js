@@ -578,6 +578,53 @@ app.post('/translate', async (req, res) => {
     }
 });
 
+// 배치 번역 엔드포인트 (여러 텍스트 한번에)
+app.post('/translate-batch', async (req, res) => {
+    try {
+        const { texts, targetLang } = req.body;
+
+        if (!texts || !Array.isArray(texts) || texts.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: '번역할 텍스트 배열을 입력해주세요.'
+            });
+        }
+
+        const translations = await Promise.all(
+            texts.map(async (item) => {
+                const cacheKey = `${item.text}_${targetLang}`;
+
+                if (translationCache.has(cacheKey)) {
+                    return {
+                        ...item,
+                        translatedText: translationCache.get(cacheKey)
+                    };
+                }
+
+                const [translation] = await translate.translate(item.text, targetLang);
+                translationCache.set(cacheKey, translation);
+
+                return {
+                    ...item,
+                    translatedText: translation
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            translations
+        });
+
+    } catch (error) {
+        console.error('배치 번역 오류:', error);
+        res.status(500).json({
+            success: false,
+            error: '번역 중 오류가 발생했습니다.'
+        });
+    }
+});
+
 
 
 
