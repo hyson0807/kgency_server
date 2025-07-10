@@ -482,18 +482,24 @@ app.post('/generate-resume-for-posting', async (req, res) => {
         const postingJobKeywords = postingKeywords?.filter(k => k.keyword.category === '직종').map(k => k.keyword.keyword) || [];
         const postingConditionKeywords = postingKeywords?.filter(k => k.keyword.category === '근무조건').map(k => k.keyword.keyword) || [];
 
-        // 희망 근무 요일 문자열 생성
-        let workDaysText = '';
-// 배열인지 확인하고 처리
-        if (selectedDays) {
-            // 문자열인 경우 배열로 변환
-            const daysArray = Array.isArray(selectedDays) ? selectedDays : [selectedDays];
+        // 배열 확인 및 변환 함수
+        const toArray = (value) => {
+            if (!value) return [];
+            if (Array.isArray(value)) return value;
+            if (typeof value === 'string') {
+                return value.split(',').map(item => item.trim()).filter(item => item);
+            }
+            return [];
+        };
 
-            if (daysArray.length > 0) {
-                workDaysText = daysArray.join(', ');
-                if (daysNegotiable) {
-                    workDaysText += ' (협의가능)';
-                }
+// 희망 근무 요일 문자열 생성
+        let workDaysText = '';
+        const daysArray = toArray(selectedDays);
+
+        if (daysArray.length > 0) {
+            workDaysText = daysArray.join(', ');
+            if (daysNegotiable) {
+                workDaysText += ' (협의가능)';
             }
         } else if (daysNegotiable) {
             workDaysText = '협의가능';
@@ -503,16 +509,12 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
 // 희망 시간대 문자열 생성
         let workTimesText = '';
-// 배열인지 확인하고 처리
-        if (selectedTimes) {
-            // 문자열인 경우 배열로 변환
-            const timesArray = Array.isArray(selectedTimes) ? selectedTimes : [selectedTimes];
+        const timesArray = toArray(selectedTimes);
 
-            if (timesArray.length > 0) {
-                workTimesText = timesArray.join(', ');
-                if (timesNegotiable) {
-                    workTimesText += ' (협의가능)';
-                }
+        if (timesArray.length > 0) {
+            workTimesText = timesArray.join(', ');
+            if (timesNegotiable) {
+                workTimesText += ' (협의가능)';
             }
         } else if (timesNegotiable) {
             workTimesText = '협의가능';
