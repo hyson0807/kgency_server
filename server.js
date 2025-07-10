@@ -508,7 +508,7 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
 국가: ${userCountryKeywords}
 비자: ${userInfo?.visa}
-나이: ${userInfo.age} (${userInfo.gender})
+나이: ${userInfo?.age} (${userInfo?.gender})
 희망 근무 기간: ${userInfo?.how_long}
 희망 근무 요일: ${workDaysText}
 희망 시간대: ${workTimesText}
