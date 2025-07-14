@@ -478,8 +478,7 @@ app.post('/generate-resume-for-posting', async (req, res) => {
 
         console.log(1234);
 
-        const resume = `
-안녕하세요!, ${jobPosting.company.name} 채용 담당자님!
+        const resume = `안녕하세요!, ${jobPosting.company.name} 채용 담당자님!
 저는 케이전시 ${jobPosting.title}를 보고 지원한 ${userProfile.name || ''}입니다. 
 
 국가: ${userCountryKeywords}
