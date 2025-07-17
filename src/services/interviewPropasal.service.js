@@ -57,33 +57,42 @@ exports.getProposalByApplication = async (applicationId) => {
 
 exports.getAvailableSlots = async (companyId) => {
     try {
+        console.log('Getting slots for company:', companyId);
+
         // 회사의 모든 슬롯 조회
         const { data: slots, error: slotsError } = await supabase
             .from('interview_slots')
             .select('*')
             .eq('company_id', companyId)
-            .eq('is_available', true)
             .gte('start_time', new Date().toISOString())
             .order('start_time', { ascending: true });
 
-
-
         if (slotsError) throw slotsError;
 
-        // 이미 예약된 슬롯 조회
-        const { data: bookedSlots, error: bookedError } = await supabase
+        console.log('Total slots found:', slots?.length || 0);
+
+        if (!slots || slots.length === 0) {
+            return [];
+        }
+
+        // 해당 회사의 슬롯 ID들만 추출
+        const slotIds = slots.map(s => s.id);
+
+        // 해당 슬롯들 중 예약된 것만 조회
+        const { data: bookedSchedules, error: bookedError } = await supabase
             .from('interview_schedules')
             .select('interview_slot_id')
+            .in('interview_slot_id', slotIds)  // 해당 회사의 슬롯만 체크
             .eq('status', 'confirmed');
 
         if (bookedError) throw bookedError;
 
-        const bookedSlotIds = bookedSlots.map(s => s.interview_slot_id);
+        const bookedSlotIds = new Set(bookedSchedules?.map(s => s.interview_slot_id) || []);
 
         // 예약되지 않은 슬롯만 필터링
-        const availableSlots = slots.filter(slot =>
-            !bookedSlotIds.includes(slot.id)
-        );
+        const availableSlots = slots.filter(slot => !bookedSlotIds.has(slot.id));
+
+        console.log('Available slots after filtering:', availableSlots.length);
 
         return availableSlots;
     } catch (error) {

@@ -5,6 +5,8 @@ exports.createInterviewSlot = async (req, res, next) => {
     try {
         const { companyId, slots, date } = req.body;
 
+        console.log(slots);
+
         // date만 있고 slots가 없거나 빈 배열인 경우 = 해당 날짜 삭제
         if (date && (!slots || slots.length === 0)) {
             await interviewSlotService.deleteByDate(companyId, date);
