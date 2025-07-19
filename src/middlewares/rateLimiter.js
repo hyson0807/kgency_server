@@ -3,7 +3,7 @@ const rateLimit = require('express-rate-limit');
 // 일반 API 제한
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15분
-    max: 100, // 최대 100개 요청
+    max: 500, // 최대 500개 요청
     message: '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.'
 });
 

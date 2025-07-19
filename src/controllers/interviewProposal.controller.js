@@ -60,3 +60,30 @@ exports.getProposalByApplication = async (req, res, next) => {
         next(err);
     }
 };
+
+exports.deleteProposal = async (req, res, next) => {
+    try {
+        const { applicationId } = req.params;
+
+        if (!applicationId) {
+            return res.status(400).json({
+                success: false,
+                message: '지원서 ID가 필요합니다.'
+            });
+        }
+
+        const result = await interviewProposalService.deleteProposal(applicationId);
+
+        res.json({
+            success: true,
+            message: result.message,
+            data: {
+                deletedProposal: result.deletedProposal,
+                deletedApplication: result.deletedApplication
+            }
+        });
+    } catch (err) {
+        console.error('Delete proposal error:', err);
+        next(err);
+    }
+}

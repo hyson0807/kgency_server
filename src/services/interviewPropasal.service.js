@@ -100,3 +100,86 @@ exports.getAvailableSlots = async (companyId) => {
         throw error;
     }
 };
+
+exports.deleteProposal = async (applicationId) => {
+    try {
+        // 1. 먼저 해당 application 정보 조회
+        const { data: application, error: appError } = await supabase
+            .from('applications')
+            .select('id, type')
+            .eq('id', applicationId)
+            .single();
+
+        if (appError || !application) {
+            throw new Error('지원서를 찾을 수 없습니다.');
+        }
+
+        // 2. 해당 application의 interview_proposal 조회
+        const { data: proposal, error: proposalFindError } = await supabase
+            .from('interview_proposals')
+            .select('id')
+            .eq('application_id', applicationId)
+            .single();
+
+        if (proposalFindError || !proposal) {
+            throw new Error('면접 제안을 찾을 수 없습니다.');
+        }
+
+        // 3. interview_schedules 삭제 (외래키 제약조건 때문에 먼저 삭제)
+        const { data: deletedSchedules, error: scheduleError } = await supabase
+            .from('interview_schedules')
+            .delete()
+            .eq('proposal_id', proposal.id)
+            .select();
+
+        if (scheduleError) {
+            console.error('Interview schedules 삭제 실패:', scheduleError);
+            // 스케줄이 없을 수도 있으므로 에러를 무시하고 진행
+        }
+
+        // 4. interview_proposals 삭제
+        const { data: deletedProposal, error: proposalError } = await supabase
+            .from('interview_proposals')
+            .delete()
+            .eq('application_id', applicationId)
+            .select()
+            .single();
+
+        if (proposalError) {
+            console.error('Interview proposal 삭제 실패:', proposalError);
+            throw new Error('면접 제안 삭제에 실패했습니다.');
+        }
+
+        let deletedApplication = null;
+
+        // 5. type이 company_invited인 경우 application도 삭제
+        if (application.type === 'company_invited') {
+            const { data: deletedApp, error: deleteAppError } = await supabase
+                .from('applications')
+                .delete()
+                .eq('id', applicationId)
+                .select()
+                .single();
+
+            if (deleteAppError) {
+                console.error('Application 삭제 실패:', deleteAppError);
+                throw new Error('지원서 삭제에 실패했습니다.');
+            }
+
+            deletedApplication = deletedApp;
+        }
+
+        return {
+            success: true,
+            message: application.type === 'company_invited'
+                ? '면접 제안과 지원서가 삭제되었습니다.'
+                : '면접 제안이 취소되었습니다.',
+            deletedProposal,
+            deletedApplication,
+            deletedSchedules: deletedSchedules || []
+        };
+    } catch (error) {
+        console.error('Delete proposal service error:', error);
+        throw error;
+    }
+}

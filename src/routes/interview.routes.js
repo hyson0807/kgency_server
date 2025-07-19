@@ -8,7 +8,7 @@ const {optionalAuth} = require("../middlewares/auth");
 // 회사용 라우트
 router.post('/company', optionalAuth, interviewProposalController.createProposal);
 
-
+router.delete('/company/:applicationId', interviewProposalController.deleteProposal);
 
 // 지원자용 라우트
 router.get('/user/:applicationId', interviewProposalController.getProposalByApplication);

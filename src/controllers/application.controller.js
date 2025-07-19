@@ -13,7 +13,6 @@ exports.getApplicationsByUserId = async (req, res, next) => {
 
         const result = await applicationService.getApplication(userId)
 
-        console.log(result);
 
         res.json({
             success: true,

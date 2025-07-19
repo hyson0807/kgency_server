@@ -9,6 +9,8 @@ const interviewSlotRoutes = require('./interviewSlot.routes');
 const interviewRoutes = require('./interview.routes');
 const interviewScheduleRoutes = require('./interviewSchedule.routes');
 const applicationRoutes = require('./application.routes');
+const userKeywordRoutes = require('./userKeyword.routes');
+const jobPostingRoutes = require('./jobPostingRoutes');
 const healthController = require('../controllers/health.controller');
 
 
@@ -27,7 +29,11 @@ router.use('/auth', authRoutes);
 router.use('/ai', aiRoutes);
 router.use('/translate', translateRoutes);
 
-router.use('/applications', applicationRoutes)
+router.use('/user-keyword', userKeywordRoutes);
+
+router.use('/job-postings', jobPostingRoutes);
+
+router.use('/applications', applicationRoutes);
 
 router.use('/company/interview-slots', interviewSlotRoutes);
 router.use('/interview-proposals', interviewRoutes);
