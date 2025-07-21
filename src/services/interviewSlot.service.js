@@ -176,6 +176,7 @@ exports.getAll = async (companyId) => {
             .from('interview_slots')
             .select('*')
             .eq('company_id', companyId)
+            .gt('start_time', new Date().toISOString())
             .order('start_time', { ascending: true });
 
         if (error) throw error;
