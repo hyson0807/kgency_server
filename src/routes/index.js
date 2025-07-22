@@ -12,6 +12,7 @@ const applicationRoutes = require('./application.routes');
 const userKeywordRoutes = require('./userKeyword.routes');
 const companyKeywordRoutes = require('./companyKeyword.routes');
 const jobPostingRoutes = require('./jobPostingRoutes');
+const jobPostingKeywordRoutes = require('./jobPostingKeyword.routes');
 const profileRoutes = require('./profile.routes');
 const healthController = require('../controllers/health.controller');
 
@@ -35,6 +36,7 @@ router.use('/user-keyword', userKeywordRoutes);
 router.use('/company-keyword', companyKeywordRoutes);
 
 router.use('/job-postings', jobPostingRoutes);
+router.use('/job-posting-keyword', jobPostingKeywordRoutes);
 
 router.use('/applications', applicationRoutes);
 

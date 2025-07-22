@@ -65,3 +65,38 @@ exports.getJobPostingById = async (postingId) => {
         throw error;
     }
 };
+
+exports.createJobPosting = async (jobPostingData) => {
+    try {
+        const { data, error } = await supabase
+            .from('job_postings')
+            .insert(jobPostingData)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return data;
+    } catch (error) {
+        console.error('Create job posting service error:', error);
+        throw error;
+    }
+};
+
+exports.updateJobPosting = async (postingId, jobPostingData) => {
+    try {
+        const { data, error } = await supabase
+            .from('job_postings')
+            .update(jobPostingData)
+            .eq('id', postingId)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return data;
+    } catch (error) {
+        console.error('Update job posting service error:', error);
+        throw error;
+    }
+};
