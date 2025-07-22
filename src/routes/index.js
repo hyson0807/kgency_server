@@ -10,6 +10,7 @@ const interviewRoutes = require('./interview.routes');
 const interviewScheduleRoutes = require('./interviewSchedule.routes');
 const applicationRoutes = require('./application.routes');
 const userKeywordRoutes = require('./userKeyword.routes');
+const companyKeywordRoutes = require('./companyKeyword.routes');
 const jobPostingRoutes = require('./jobPostingRoutes');
 const profileRoutes = require('./profile.routes');
 const healthController = require('../controllers/health.controller');
@@ -31,6 +32,7 @@ router.use('/ai', aiRoutes);
 router.use('/translate', translateRoutes);
 
 router.use('/user-keyword', userKeywordRoutes);
+router.use('/company-keyword', companyKeywordRoutes);
 
 router.use('/job-postings', jobPostingRoutes);
 
