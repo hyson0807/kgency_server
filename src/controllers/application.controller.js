@@ -21,7 +21,7 @@ const createInstantInterviewApplication = async (req, res) => {
                 user_id: userId,
                 company_id: companyId,
                 job_posting_id: jobPostingId,
-                type: 'user_initiated',
+                type: 'user_instant_interview',
                 status: 'scheduled' // 바로 scheduled 상태로
             })
             .select()
