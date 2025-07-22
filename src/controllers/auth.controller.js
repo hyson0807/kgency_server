@@ -56,6 +56,13 @@ const verifyOTP = async (req, res) => {
                 success: false,
                 error: '이미 등록된 전화번호입니다'
             });
+        } else if (error.message?.includes('구직자 계정입니다') ||
+            error.message?.includes('구인자 계정입니다')) {
+            // 계정 타입 불일치 에러 처리 추가
+            res.status(400).json({
+                success: false,
+                error: error.message
+            });
         } else if (error.message?.includes('OTP')) {
             res.status(400).json({
                 success: false,
@@ -69,6 +76,7 @@ const verifyOTP = async (req, res) => {
         }
     }
 };
+
 
 // 회원 탈퇴
 const deleteAccount = async (req, res) => {

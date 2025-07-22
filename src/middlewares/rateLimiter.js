@@ -10,7 +10,7 @@ const apiLimiter = rateLimit({
 // 로그인 시도 제한
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15분
-    max: 30, // 최대 30번 시도
+    max: 300, // 최대 30번 시도
     skipSuccessfulRequests: true,
     message: '로그인 시도가 너무 많습니다. 15분 후 다시 시도해주세요.'
 });
@@ -18,7 +18,7 @@ const loginLimiter = rateLimit({
 // SMS 발송 제한
 const smsLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1시간
-    max: 30, // 최대 3번
+    max: 300, // 최대 3번
     message: 'SMS 발송 한도를 초과했습니다. 1시간 후 다시 시도해주세요.'
 });
 

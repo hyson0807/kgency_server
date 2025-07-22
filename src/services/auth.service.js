@@ -78,6 +78,15 @@ const handleTestAccount = async (phone, testInfo) => {
         .single();
 
     if (existingUser) {
+        // 테스트 계정도 userType 검증 추가
+        if (existingUser.user_type !== testInfo.type) {
+            throw new Error(
+                existingUser.user_type === 'user'
+                    ? '구직자 테스트 계정입니다. 구직자 로그인을 이용해주세요.'
+                    : '구인자 테스트 계정입니다. 구인자 로그인을 이용해주세요.'
+            );
+        }
+
         // 기존 테스트 유저 로그인
         const token = jwt.sign({
             userId: existingUser.id,
@@ -104,6 +113,7 @@ const handleTestAccount = async (phone, testInfo) => {
     return createNewUser(phone, testInfo.type, testInfo.name);
 };
 
+
 // 실제 인증 처리
 const handleAuthentication = async (phone, userType) => {
     const { data: existingUser, error: fetchError } = await supabase
@@ -117,6 +127,15 @@ const handleAuthentication = async (phone, userType) => {
     }
 
     if (existingUser) {
+        // 기존 유저 로그인 시 userType 검증 추가
+        if (existingUser.user_type !== userType) {
+            throw new Error(
+                existingUser.user_type === 'user'
+                    ? '구직자 계정입니다. 구직자 로그인을 이용해주세요.'
+                    : '구인자 계정입니다. 구인자 로그인을 이용해주세요.'
+            );
+        }
+
         // 기존 유저 로그인
         const token = jwt.sign({
             userId: existingUser.id,
@@ -139,13 +158,14 @@ const handleAuthentication = async (phone, userType) => {
         };
     }
 
-    // 신규 유저 생성
+    // 신규 유저 생성 (기존 코드 유지)
     if (!userType) {
         throw new Error('신규 가입 시 userType이 필요합니다');
     }
 
     return createNewUser(phone, userType);
 };
+
 
 // 신규 유저 생성
 const createNewUser = async (phone, userType, name = null) => {
