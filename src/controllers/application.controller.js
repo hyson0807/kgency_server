@@ -1,7 +1,7 @@
 const applicationService = require('../services/application.service');
 const { supabase } = require('../config/database');
 
-// 인스턴트 면접 지원서 생성
+// 인스턴트 면접 지원서 생성.
 const createInstantInterviewApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
