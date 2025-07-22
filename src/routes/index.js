@@ -21,7 +21,7 @@ router.use((req, res, next) => {
     next();
 });
 
-// 헬스 체크 (메인 라우터에 직접 연결)
+// 헬스 체크 (메인 라우터에 직접 연결)123
 router.get('/health', healthController.healthCheck);
 
 
