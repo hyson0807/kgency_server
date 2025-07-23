@@ -11,6 +11,8 @@ exports.getApplication = async (id) => {
                     title,
                     description,
                     job_address,   
+                    is_active,
+                    deleted_at,
                     company: company_id (
                         id,
                         name,
@@ -23,6 +25,7 @@ exports.getApplication = async (id) => {
             `)
             .eq('user_id', id)
             .order('applied_at', { ascending: false })
+
 
 
         if (error) throw error

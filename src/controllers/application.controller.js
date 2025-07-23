@@ -2,7 +2,7 @@ const applicationService = require('../services/application.service');
 const { supabase } = require('../config/database');
 
 // 중복 지원 확인
-const checkDuplicateApplication = async (req, res) => {
+exports.checkDuplicateApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
         const { jobPostingId } = req.query;
@@ -41,7 +41,7 @@ const checkDuplicateApplication = async (req, res) => {
 };
 
 // 일반 지원서 생성 (메시지 포함)
-const createApplication = async (req, res) => {
+exports.createApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
         const { companyId, jobPostingId, messageId } = req.body;
@@ -92,7 +92,7 @@ const createApplication = async (req, res) => {
 };
 
 // 인스턴트 면접 지원서 생성.
-const createInstantInterviewApplication = async (req, res) => {
+exports.createInstantInterviewApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
         const { companyId, jobPostingId } = req.body;
@@ -181,11 +181,3 @@ exports.getApplicationByPostingId = async (req, res, next) => {
         next(err);
     }
 }
-
-module.exports = {
-    checkDuplicateApplication,
-    createApplication,
-    createInstantInterviewApplication,
-    getApplicationsByUserId: exports.getApplicationsByUserId,
-    getApplicationByPostingId: exports.getApplicationByPostingId
-};
