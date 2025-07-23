@@ -1,4 +1,5 @@
 const { supabase } = require('../config');
+const translateService = require('./translate.service');
 
 const generateResumeForPosting = async (data) => {
     const { user_id, job_posting_id, company_id, question, workDaysString, workTimesString } = data;
@@ -65,7 +66,42 @@ const generateResumeForPosting = async (data) => {
     const userCountryKeywords = userKeywords?.filter(k => k.keyword.category === '국가')
         .map(k => k.keyword.keyword).join(', ') || '';
 
-    // 7. 이력서 생성
+    // 7. 번역 준비
+    const textsToTranslate = [];
+    const translateIndexMap = {};
+    
+    if (userInfo?.experience_content && userInfo.experience_content !== '정보 없음') {
+        translateIndexMap.experience_content = textsToTranslate.length;
+        textsToTranslate.push(userInfo.experience_content);
+    }
+    
+    if (question && question !== '없음') {
+        translateIndexMap.question = textsToTranslate.length;
+        textsToTranslate.push(question);
+    }
+    
+    // 8. 번역 실행
+    let translatedTexts = {};
+    if (textsToTranslate.length > 0) {
+        try {
+            const translations = await translateService.translateBatch(textsToTranslate, 'ko');
+            
+            if (translateIndexMap.experience_content !== undefined) {
+                translatedTexts.experience_content = translations[translateIndexMap.experience_content];
+            }
+            
+            if (translateIndexMap.question !== undefined) {
+                translatedTexts.question = translations[translateIndexMap.question];
+            }
+        } catch (error) {
+            console.error('번역 오류:', error);
+            // 번역 실패 시 원본 사용
+            translatedTexts.experience_content = userInfo?.experience_content || '정보 없음';
+            translatedTexts.question = question || '없음';
+        }
+    }
+    
+    // 9. 이력서 생성
     const resume = `안녕하세요!, ${jobPosting.company.name} 채용 담당자님!
 저는 케이전시 ${jobPosting.title}를 보고 지원한 ${userProfile.name || ''}입니다. 
 
@@ -76,9 +112,9 @@ const generateResumeForPosting = async (data) => {
 희망 근무 요일: ${workDaysString || '없음'}
 희망 시간대: ${workTimesString || '없음'}
 관련 경력: ${userInfo?.experience || '정보 없음'}
-경력 내용: ${userInfo?.experience_content || '정보 없음'}
+경력 내용: ${translatedTexts.experience_content || userInfo?.experience_content || '정보 없음'}
 한국어 실력: ${userInfo?.korean_level || '정보 없음'}  토픽 급수: ${userInfo?.topic || 'x'}
-궁금한 점: ${question || '없음'}
+궁금한 점: ${translatedTexts.question || question || '없음'}
 
 저는 진심으로 ${jobPosting.company.name} 팀과 면접보고 싶어서 인사 드립니다.
 가능한 시간 알려주시면 감사하겠습니다!`;

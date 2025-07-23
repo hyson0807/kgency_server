@@ -39,19 +39,27 @@ const translateBatch = async (texts, targetLang) => {
     }
 
     const translations = await Promise.all(
-        texts.map(async (item) => {
-            const cacheKey = `${item.text}_${targetLang}`;
+        texts.map(async (item, index) => {
+            // 문자열 배열과 객체 배열 모두 지원
+            const textToTranslate = typeof item === 'string' ? item : item.text;
+            const cacheKey = `${textToTranslate}_${targetLang}`;
 
             if (translationCache.has(cacheKey)) {
+                if (typeof item === 'string') {
+                    return translationCache.get(cacheKey);
+                }
                 return {
                     ...item,
                     translatedText: translationCache.get(cacheKey)
                 };
             }
 
-            const [translation] = await translate.translate(item.text, targetLang);
+            const [translation] = await translate.translate(textToTranslate, targetLang);
             translationCache.set(cacheKey, translation);
 
+            if (typeof item === 'string') {
+                return translation;
+            }
             return {
                 ...item,
                 translatedText: translation
