@@ -8,6 +8,9 @@ const routes = require('./routes');
 // Express 앱 생성
 const app = express();
 
+// Trust proxy 설정 (Railway, Heroku 등 클라우드 플랫폼 사용 시 필요)
+app.set('trust proxy', 1);
+
 // 기본 미들웨어
 app.use(cors(corsOptions));
 app.use(express.json());
