@@ -15,6 +15,7 @@ const jobPostingRoutes = require('./jobPostingRoutes');
 const jobPostingKeywordRoutes = require('./jobPostingKeyword.routes');
 const profileRoutes = require('./profile.routes');
 const messageRoutes = require('./message.routes');
+const userRoutes = require('./user.routes');
 const healthController = require('../controllers/health.controller');
 
 
@@ -42,6 +43,8 @@ router.use('/job-posting-keyword', jobPostingKeywordRoutes);
 router.use('/applications', applicationRoutes);
 
 router.use('/profiles', profileRoutes);
+
+router.use('/users', userRoutes);
 
 router.use('/messages', messageRoutes);
 
