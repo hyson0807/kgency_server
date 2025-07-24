@@ -1,5 +1,6 @@
 // services/interviewProposal.service.js
 const { supabase } = require('../config/database');
+const notificationService = require('./notification.service');
 
 exports.createProposal = async (applicationId, companyId, location) => {
     try {
@@ -27,6 +28,30 @@ exports.createProposal = async (applicationId, companyId, location) => {
             .single();
 
         if (error) throw error;
+
+        // Get application details to send notification
+        const { data: application, error: appError } = await supabase
+            .from('applications')
+            .select(`
+                user_id,
+                job_postings!inner(
+                    title,
+                    profiles!inner(name)
+                )
+            `)
+            .eq('id', applicationId)
+            .single();
+
+        if (!appError && application) {
+            // Send push notification to the user
+            await notificationService.sendInterviewProposalNotification(
+                application.user_id,
+                application.job_postings.profiles.name,
+                application.job_postings.title,
+                applicationId
+            );
+        }
+
         return data;
     } catch (error) {
         console.error('Interview proposal creation error:', error);
