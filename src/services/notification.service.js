@@ -118,6 +118,28 @@ class NotificationService {
   }
 
   /**
+   * Send interview schedule confirmation notification to company
+   * @param {string} companyId - Company ID who will receive the notification
+   * @param {string} userName - Name of the user who confirmed the interview
+   * @param {string} jobTitle - Job title
+   * @param {string} interviewDate - Interview date and time
+   * @param {string} applicationId - Application ID for navigation
+   */
+  async sendInterviewScheduleConfirmationToCompany(companyId, userName, jobTitle, interviewDate, applicationId) {
+    const title = '면접 일정이 확정되었습니다!';
+    const body = `${userName}님이 ${jobTitle} 포지션 면접 일정을 확정했습니다. (${interviewDate})`;
+    const data = {
+      type: 'interview_schedule_confirmed',
+      applicationId,
+      userName,
+      jobTitle,
+      interviewDate,
+    };
+
+    return await this.sendToUser(companyId, title, body, data);
+  }
+
+  /**
    * Core notification sending logic
    * @param {string} pushToken - Expo push token
    * @param {string} title - Notification title

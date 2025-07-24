@@ -1,5 +1,6 @@
 // services/interviewSchedule.service.js
 const { supabase } = require('../config/database');
+const notificationService = require('./notification.service');
 
 exports.createSchedule = async (proposalId, interviewSlotId) => {
     try {
@@ -74,6 +75,57 @@ exports.createSchedule = async (proposalId, interviewSlotId) => {
             .eq('id', proposalId);
 
         if (proposalError) throw proposalError;
+
+        // 5. 알림 발송을 위한 데이터 조회
+        const { data: proposalData, error: proposalDataError } = await supabase
+            .from('interview_proposals')
+            .select(`
+                *,
+                application:applications (
+                    id,
+                    user:profiles!user_id (
+                        id,
+                        name
+                    ),
+                    job_posting:job_postings (
+                        id,
+                        title,
+                        company:profiles!company_id (
+                            id,
+                            name
+                        )
+                    )
+                )
+            `)
+            .eq('id', proposalId)
+            .single();
+
+        if (!proposalDataError && proposalData) {
+            // 면접 시간 포맷팅
+            const interviewDate = new Date(slot.start_time);
+            const formattedDate = interviewDate.toLocaleDateString('ko-KR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            // 회사에게 알림 발송
+            try {
+                await notificationService.sendInterviewScheduleConfirmationToCompany(
+                    proposalData.company_id,
+                    proposalData.application.user.name,
+                    proposalData.application.job_posting.title,
+                    formattedDate,
+                    proposalData.application_id
+                );
+                console.log('Interview schedule notification sent to company');
+            } catch (notificationError) {
+                // 알림 발송 실패해도 스케줄 생성은 성공으로 처리
+                console.error('Failed to send notification:', notificationError);
+            }
+        }
 
         return schedule;
     } catch (error) {
