@@ -34,6 +34,7 @@ exports.createProposal = async (applicationId, companyId, location) => {
             .from('applications')
             .select(`
                 user_id,
+                type,
                 job_postings!inner(
                     title,
                     profiles!inner(name)
@@ -42,7 +43,7 @@ exports.createProposal = async (applicationId, companyId, location) => {
             .eq('id', applicationId)
             .single();
 
-        if (!appError && application) {
+        if (!appError && application && application.type !== 'user_instant_interview') {
             // Send push notification to the user
             await notificationService.sendInterviewProposalNotification(
                 application.user_id,
