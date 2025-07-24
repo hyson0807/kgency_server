@@ -1,5 +1,5 @@
 const { Expo } = require('expo-server-sdk');
-const supabase = require('../config/database');
+const { supabase } = require('../config/database');
 
 // Create a new Expo SDK client
 const expo = new Expo();
