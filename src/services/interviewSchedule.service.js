@@ -323,7 +323,8 @@ exports.getUserSchedules = async (userId, month) => {
                             id,
                             title,
                             salary_range,
-                            working_hours
+                            working_hours,
+                            interview_location
                         )
                     )
                 )
