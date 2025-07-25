@@ -66,7 +66,13 @@ exports.getProposalByApplication = async (applicationId) => {
         const { data, error } = await supabase
             .from('interview_proposals')
             .select(`
-                * 
+                *,
+                applications!inner(
+                    job_posting_id,
+                    job_postings!inner(
+                        special_notes
+                    )
+                )
             `)
             .eq('application_id', applicationId)
             .single();

@@ -39,11 +39,17 @@ exports.getProposalByApplication = async (req, res, next) => {
             // 회사의 가능한 시간대도 함께 조회
             const availableSlots = await interviewProposalService.getAvailableSlots(proposal.company_id);
 
+            // Extract job posting data from the nested structure
+            const jobPosting = proposal.applications?.job_postings ? {
+                special_notes: proposal.applications.job_postings.special_notes
+            } : null;
+
             return res.json({  // return 추가
                 success: true,
                 data: {
                     proposal,
-                    availableSlots
+                    availableSlots,
+                    jobPosting
                 }
             });
         }
