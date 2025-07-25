@@ -140,6 +140,28 @@ class NotificationService {
   }
 
   /**
+   * Send interview cancellation notification to user
+   * @param {string} userId - User ID who will receive the notification
+   * @param {string} companyName - Name of the company that cancelled
+   * @param {string} jobTitle - Job title
+   * @param {string} interviewDate - Interview date and time that was cancelled
+   * @param {string} applicationId - Application ID for navigation
+   */
+  async sendInterviewCancellationNotification(userId, companyName, jobTitle, interviewDate, applicationId) {
+    const title = '면접이 취소되었습니다';
+    const body = `${companyName}에서 ${jobTitle} 포지션 면접이 취소되었습니다. (${interviewDate})`;
+    const data = {
+      type: 'interview_cancelled',
+      applicationId,
+      companyName,
+      jobTitle,
+      interviewDate,
+    };
+
+    return await this.sendToUser(userId, title, body, data);
+  }
+
+  /**
    * Core notification sending logic
    * @param {string} pushToken - Expo push token
    * @param {string} title - Notification title

@@ -421,13 +421,35 @@ exports.getUserSchedulesByDate = async (userId, date) => {
 // 면접 일정 취소
 exports.cancelSchedule = async (scheduleId, companyId) => {
     try {
-        // 권한 확인을 위해 먼저 조회
+        // 권한 확인을 위해 먼저 조회 (상세 정보 포함)
         const { data: schedule, error: fetchError } = await supabase
             .from('interview_schedules')
             .select(`
                 *,
                 interview_slot:interview_slots!interview_schedules_interview_slot_id_fkey (
-                    company_id
+                    id,
+                    company_id,
+                    start_time,
+                    end_time
+                ),
+                proposal:interview_proposals!interview_schedules_proposal_id_fkey (
+                    id,
+                    application:applications!interview_proposals_application_id_fkey (
+                        id,
+                        user_id,
+                        user:profiles!applications_user_id_fkey (
+                            id,
+                            name
+                        ),
+                        job_posting:job_postings!applications_job_posting_id_fkey (
+                            id,
+                            title,
+                            company:profiles!job_postings_company_id_fkey (
+                                id,
+                                name
+                            )
+                        )
+                    )
                 )
             `)
             .eq('id', scheduleId)
@@ -457,6 +479,39 @@ exports.cancelSchedule = async (scheduleId, companyId) => {
             .eq('id', schedule.proposal_id);
 
         if (proposalError) throw proposalError;
+
+        // 알림 발송을 위한 데이터 준비
+        if (schedule.proposal?.application) {
+            const { application } = schedule.proposal;
+            const userId = application.user_id;
+            const companyName = application.job_posting?.company?.name || '회사';
+            const jobTitle = application.job_posting?.title || '직책';
+            
+            // 면접 시간 포맷팅
+            const interviewDate = new Date(schedule.interview_slot.start_time);
+            const formattedDate = interviewDate.toLocaleDateString('ko-KR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            // 유저에게 취소 알림 발송
+            try {
+                await notificationService.sendInterviewCancellationNotification(
+                    userId,
+                    companyName,
+                    jobTitle,
+                    formattedDate,
+                    application.id
+                );
+                console.log('Interview cancellation notification sent to user');
+            } catch (notificationError) {
+                // 알림 발송 실패해도 취소는 성공으로 처리
+                console.error('Failed to send cancellation notification:', notificationError);
+            }
+        }
 
         return { success: true };
     } catch (error) {
