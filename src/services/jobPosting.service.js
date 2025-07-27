@@ -100,3 +100,40 @@ exports.updateJobPosting = async (postingId, jobPostingData) => {
         throw error;
     }
 };
+
+exports.getCompanyJobPostingsWithStatus = async (companyId, jobSeekerId) => {
+    try {
+        // 회사 공고 목록 가져오기
+        const { data: jobPostings, error: jobError } = await supabase
+            .from('job_postings')
+            .select('id, title')
+            .eq('company_id', companyId)
+            .eq('is_active', true)
+            .is('deleted_at', null);
+
+        if (jobError) throw jobError;
+
+        // 구직자의 기존 지원서 확인
+        const { data: existingApplications, error: appError } = await supabase
+            .from('applications')
+            .select('job_posting_id')
+            .eq('user_id', jobSeekerId)
+            .eq('company_id', companyId)
+            .is('deleted_at', null);
+
+        if (appError) throw appError;
+
+        const appliedJobPostingIds = new Set(existingApplications?.map(app => app.job_posting_id) || []);
+
+        // 공고에 지원 여부 정보 추가
+        const jobPostingsWithStatus = (jobPostings || []).map(posting => ({
+            ...posting,
+            hasExistingApplication: appliedJobPostingIds.has(posting.id)
+        }));
+
+        return jobPostingsWithStatus;
+    } catch (error) {
+        console.error('Get company job postings with status service error:', error);
+        throw error;
+    }
+};

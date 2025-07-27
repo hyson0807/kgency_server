@@ -121,9 +121,39 @@ const updateJobPosting = async (req, res) => {
     }
 };
 
+// 회사의 공고 목록 조회 (with application status)
+const getCompanyJobPostingsWithStatus = async (req, res) => {
+    try {
+        const companyId = req.user.userId;
+        const { jobSeekerId } = req.query;
+
+        if (!jobSeekerId) {
+            return res.status(400).json({
+                success: false,
+                message: 'jobSeekerId is required'
+            });
+        }
+
+        const data = await jobPostingService.getCompanyJobPostingsWithStatus(companyId, jobSeekerId);
+
+        res.status(200).json({
+            success: true,
+            data
+        });
+    } catch (error) {
+        console.error('Get company job postings with status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch company job postings',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getActiveJobPostings,
     getJobPostingById,
     createJobPosting,
-    updateJobPosting
+    updateJobPosting,
+    getCompanyJobPostingsWithStatus
 };

@@ -176,9 +176,52 @@ const getJobSeekers = async (req, res) => {
     }
 };
 
+// 특정 사용자 프로필 조회 (회사용)
+const getUserProfile = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        if (!userId) {
+            return res.status(400).json({
+                success: false,
+                error: 'userId가 필요합니다.'
+            });
+        }
+
+        const { data: profileData, error } = await supabase
+            .from('profiles')
+            .select('id, name, user_type')
+            .eq('id', userId)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: '사용자가 존재하지 않습니다.'
+                });
+            }
+            throw error;
+        }
+
+        res.json({
+            success: true,
+            data: profileData
+        });
+
+    } catch (error) {
+        console.error('사용자 프로필 조회 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '사용자 프로필을 불러오는데 실패했습니다.'
+        });
+    }
+};
+
 module.exports = {
     getProfile,
     updateProfile,
     refreshProfile,
-    getJobSeekers
+    getJobSeekers,
+    getUserProfile
 };

@@ -17,4 +17,7 @@ router.get('/user/:userId', applicationController.getApplicationsByUserId)
 
 router.get('/company/:jobPostingId', applicationController.getApplicationByPostingId)
 
+// POST /api/applications/invitation - Create invitation application (requires auth)
+router.post('/invitation', authMiddleware, applicationController.createInvitationApplication);
+
 module.exports = router
