@@ -150,10 +150,33 @@ const getCompanyJobPostingsWithStatus = async (req, res) => {
     }
 };
 
+// 매칭된 공고 조회 (사용자 키워드 기반 적합도 계산) - 성능 최적화
+const getMatchedPostings = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        const matchedPostings = await jobPostingService.getMatchedPostingsForUser(userId);
+
+        res.json({
+            success: true,
+            data: matchedPostings
+        });
+
+    } catch (error) {
+        console.error('Matched postings fetch error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch matched postings',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getActiveJobPostings,
     getJobPostingById,
     createJobPosting,
     updateJobPosting,
-    getCompanyJobPostingsWithStatus
+    getCompanyJobPostingsWithStatus,
+    getMatchedPostings
 };
