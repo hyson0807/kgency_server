@@ -92,4 +92,37 @@ exports.deleteProposal = async (req, res, next) => {
         console.error('Delete proposal error:', err);
         next(err);
     }
-}
+};
+
+// Bulk check for multiple applications - N+1 쿼리 문제 해결
+exports.bulkCheckProposals = async (req, res, next) => {
+    try {
+        const { applicationIds } = req.body;
+
+        if (!applicationIds || !Array.isArray(applicationIds) || applicationIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: '지원서 ID 배열이 필요합니다.'
+            });
+        }
+
+        // 성능을 위해 최대 100개로 제한
+        if (applicationIds.length > 100) {
+            return res.status(400).json({
+                success: false,
+                message: '최대 100개의 지원서만 처리할 수 있습니다.'
+            });
+        }
+
+        const proposals = await interviewProposalService.bulkGetProposalsByApplications(applicationIds);
+
+        res.json({
+            success: true,
+            data: proposals
+        });
+
+    } catch (err) {
+        console.error('Bulk check proposals error:', err);
+        next(err);
+    }
+};

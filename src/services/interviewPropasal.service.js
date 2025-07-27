@@ -214,4 +214,49 @@ exports.deleteProposal = async (applicationId) => {
         console.error('Delete proposal service error:', error);
         throw error;
     }
-}
+};
+
+// Bulk check for multiple applications - N+1 쿼리 문제 해결
+exports.bulkGetProposalsByApplications = async (applicationIds) => {
+    try {
+        console.log('Bulk checking proposals for applications:', applicationIds.length);
+
+        // 단일 쿼리로 모든 면접 제안 조회
+        const { data: proposals, error } = await supabase
+            .from('interview_proposals')
+            .select(`
+                *,
+                applications!inner(
+                    id,
+                    job_posting_id,
+                    job_postings!inner(
+                        special_notes
+                    )
+                )
+            `)
+            .in('application_id', applicationIds)
+            .in('status', ['pending', 'scheduled']); // 활성 상태만 조회
+
+        if (error) {
+            console.error('Bulk proposals fetch error:', error);
+            throw error;
+        }
+
+        console.log('Found proposals:', proposals?.length || 0);
+
+        // 결과를 application_id를 키로 하는 객체로 변환
+        const proposalMap = {};
+        
+        if (proposals && proposals.length > 0) {
+            proposals.forEach(proposal => {
+                proposalMap[proposal.application_id] = proposal;
+            });
+        }
+
+        return proposalMap;
+
+    } catch (error) {
+        console.error('Bulk proposals service error:', error);
+        throw error;
+    }
+};
