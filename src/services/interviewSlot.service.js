@@ -67,8 +67,12 @@ exports.create = async (companyId, slots) => {
         const slotsToInsert = [];
 
         for (const slot of slots) {
-            const startTime = `${slot.date} ${slot.startTime}:00`;
-            const endTime = `${slot.date} ${slot.endTime}:00`;
+            // 클라이언트에서 전달된 ISO 시간을 사용하거나, 기존 방식으로 fallback
+            const startTime = slot.startDateTime || `${slot.date} ${slot.startTime}:00`;
+            const endTime = slot.endDateTime || `${slot.date} ${slot.endTime}:00`;
+
+            console.log(`Processing slot - startDateTime: ${slot.startDateTime}, fallback: ${slot.date} ${slot.startTime}:00`);
+            console.log(`Final startTime: ${startTime}, endTime: ${endTime}`);
 
             // 이미 존재하는 슬롯인지 확인 (같은 시간대)
             const { data: existingSlot, error: checkError } = await supabase
