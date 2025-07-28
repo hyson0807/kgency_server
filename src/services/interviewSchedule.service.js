@@ -207,16 +207,26 @@ exports.getCompanySchedules = async (companyId, month) => {
 
         if (error) throw error;
 
+        console.log(`getCompanySchedules: Found ${data?.length || 0} total schedules`);
+        console.log(`getCompanySchedules: Filtering for company ${companyId}, month ${month}`);
+
         // 필터링 및 정렬을 JavaScript에서 처리
         const validSchedules = (data || [])
-            .filter(schedule =>
-                schedule.interview_slot &&
-                schedule.proposal &&
-                schedule.proposal.application &&
-                schedule.interview_slot.company_id === companyId &&
-                schedule.interview_slot.start_time >= `${startDate} 00:00:00` &&
-                schedule.interview_slot.start_time <= `${endDate} 23:59:59`
-            )
+            .filter(schedule => {
+                if (!schedule.interview_slot || 
+                    !schedule.proposal || 
+                    !schedule.proposal.application || 
+                    schedule.interview_slot.company_id !== companyId) {
+                    return false;
+                }
+                
+                // 날짜 비교를 더 안전하게 처리
+                const slotDate = new Date(schedule.interview_slot.start_time);
+                const monthStart = new Date(`${startDate}T00:00:00`);
+                const monthEnd = new Date(`${endDate}T23:59:59`);
+                
+                return slotDate >= monthStart && slotDate <= monthEnd;
+            })
             .sort((a, b) =>
                 new Date(a.interview_slot.start_time).getTime() -
                 new Date(b.interview_slot.start_time).getTime()
@@ -267,14 +277,21 @@ exports.getCompanySchedulesByDate = async (companyId, date) => {
         if (error) throw error;
 
         const validSchedules = (data || [])
-            .filter(schedule =>
-                schedule.interview_slot &&
-                schedule.proposal &&
-                schedule.proposal.application &&
-                schedule.interview_slot.company_id === companyId &&
-                schedule.interview_slot.start_time >= `${date} 00:00:00` &&
-                schedule.interview_slot.start_time < `${date} 23:59:59`
-            )
+            .filter(schedule => {
+                if (!schedule.interview_slot || 
+                    !schedule.proposal || 
+                    !schedule.proposal.application || 
+                    schedule.interview_slot.company_id !== companyId) {
+                    return false;
+                }
+                
+                // 날짜 비교를 더 안전하게 처리
+                const slotDate = new Date(schedule.interview_slot.start_time);
+                const dayStart = new Date(`${date}T00:00:00`);
+                const dayEnd = new Date(`${date}T23:59:59`);
+                
+                return slotDate >= dayStart && slotDate <= dayEnd;
+            })
             .sort((a, b) =>
                 new Date(a.interview_slot.start_time).getTime() -
                 new Date(b.interview_slot.start_time).getTime()
@@ -334,16 +351,26 @@ exports.getUserSchedules = async (userId, month) => {
 
         if (error) throw error;
 
+        console.log(`getUserSchedules: Found ${data?.length || 0} total schedules`);
+        console.log(`getUserSchedules: Filtering for user ${userId}, month ${month}`);
+
         // 날짜 필터링 및 정렬
         const validSchedules = (data || [])
-            .filter(schedule =>
-                schedule.interview_slot &&
-                schedule.proposal &&
-                schedule.proposal.application &&
-                schedule.proposal.application.user_id === userId &&
-                schedule.interview_slot.start_time >= `${startDate} 00:00:00` &&
-                schedule.interview_slot.start_time <= `${endDate} 23:59:59`
-            )
+            .filter(schedule => {
+                if (!schedule.interview_slot || 
+                    !schedule.proposal || 
+                    !schedule.proposal.application || 
+                    schedule.proposal.application.user_id !== userId) {
+                    return false;
+                }
+                
+                // 날짜 비교를 더 안전하게 처리
+                const slotDate = new Date(schedule.interview_slot.start_time);
+                const monthStart = new Date(`${startDate}T00:00:00`);
+                const monthEnd = new Date(`${endDate}T23:59:59`);
+                
+                return slotDate >= monthStart && slotDate <= monthEnd;
+            })
             .sort((a, b) =>
                 new Date(a.interview_slot.start_time).getTime() -
                 new Date(b.interview_slot.start_time).getTime()
@@ -396,14 +423,21 @@ exports.getUserSchedulesByDate = async (userId, date) => {
         if (error) throw error;
 
         const validSchedules = (data || [])
-            .filter(schedule =>
-                schedule.interview_slot &&
-                schedule.proposal &&
-                schedule.proposal.application &&
-                schedule.proposal.application.user_id === userId &&
-                schedule.interview_slot.start_time >= `${date} 00:00:00` &&
-                schedule.interview_slot.start_time < `${date} 23:59:59`
-            )
+            .filter(schedule => {
+                if (!schedule.interview_slot || 
+                    !schedule.proposal || 
+                    !schedule.proposal.application || 
+                    schedule.proposal.application.user_id !== userId) {
+                    return false;
+                }
+                
+                // 날짜 비교를 더 안전하게 처리
+                const slotDate = new Date(schedule.interview_slot.start_time);
+                const dayStart = new Date(`${date}T00:00:00`);
+                const dayEnd = new Date(`${date}T23:59:59`);
+                
+                return slotDate >= dayStart && slotDate <= dayEnd;
+            })
             .sort((a, b) =>
                 new Date(a.interview_slot.start_time).getTime() -
                 new Date(b.interview_slot.start_time).getTime()
