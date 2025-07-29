@@ -16,4 +16,7 @@ router.get('/user/:applicationId', interviewProposalController.getProposalByAppl
 // Bulk check route for multiple applications - 성능 최적화용
 router.post('/bulk-check', interviewProposalController.bulkCheckProposals);
 
+// 확정된 면접 상세 정보 조회
+router.get('/confirmed/:applicationId', interviewProposalController.getConfirmedInterview);
+
 module.exports = router;

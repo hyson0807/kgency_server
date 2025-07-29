@@ -218,10 +218,78 @@ const getUserProfile = async (req, res) => {
     }
 };
 
+// Push token 업데이트
+exports.updatePushToken = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { token } = req.body;
+
+        if (!token) {
+            return res.status(400).json({
+                success: false,
+                error: 'Push token이 필요합니다.'
+            });
+        }
+
+        const { error } = await supabase
+            .from('profiles')
+            .update({ 
+                push_token: token,
+                push_token_updated_at: new Date().toISOString()
+            })
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Push token이 업데이트되었습니다.'
+        });
+
+    } catch (error) {
+        console.error('Push token 업데이트 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Push token 업데이트에 실패했습니다.'
+        });
+    }
+};
+
+// Push token 제거
+exports.removePushToken = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        const { error } = await supabase
+            .from('profiles')
+            .update({ 
+                push_token: null,
+                push_token_updated_at: new Date().toISOString()
+            })
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        res.json({
+            success: true,
+            message: 'Push token이 제거되었습니다.'
+        });
+
+    } catch (error) {
+        console.error('Push token 제거 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Push token 제거에 실패했습니다.'
+        });
+    }
+};
+
 module.exports = {
     getProfile,
     updateProfile,
     refreshProfile,
     getJobSeekers,
-    getUserProfile
+    getUserProfile,
+    updatePushToken: exports.updatePushToken,
+    removePushToken: exports.removePushToken
 };

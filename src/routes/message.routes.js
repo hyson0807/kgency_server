@@ -7,4 +7,7 @@ const router = express.Router();
 // POST /api/messages - Create a new message (requires auth)
 router.post('/', authMiddleware, messageController.createMessage);
 
+// PUT /api/messages/:id/read - Mark message as read (requires auth)
+router.put('/:id/read', authMiddleware, messageController.markAsRead);
+
 module.exports = router;

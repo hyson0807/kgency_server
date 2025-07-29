@@ -20,4 +20,10 @@ router.get('/job-seekers', authMiddleware, profileController.getJobSeekers);
 // GET /api/profiles/user/:userId - Get specific user profile (for companies)
 router.get('/user/:userId', authMiddleware, profileController.getUserProfile);
 
+// PUT /api/profiles/push-token - Update push token
+router.put('/push-token', authMiddleware, profileController.updatePushToken);
+
+// DELETE /api/profiles/push-token - Remove push token
+router.delete('/push-token', authMiddleware, profileController.removePushToken);
+
 module.exports = router;

@@ -126,3 +126,50 @@ exports.bulkCheckProposals = async (req, res, next) => {
         next(err);
     }
 };
+
+// 확정된 면접 상세 정보 조회
+exports.getConfirmedInterview = async (req, res, next) => {
+    try {
+        const { applicationId } = req.params;
+
+        const { data, error } = await supabase
+            .from('confirmed_interviews')
+            .select(`
+                id,
+                interview_location,
+                interview_time_slots (
+                    interview_date,
+                    start_time,
+                    end_time
+                ),
+                job_postings (
+                    title,
+                    company:profiles!company_id (
+                        name,
+                        phone_number
+                    )
+                )
+            `)
+            .eq('application_id', applicationId)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                return res.status(404).json({
+                    success: false,
+                    error: '확정된 면접 정보가 없습니다.'
+                });
+            }
+            throw error;
+        }
+
+        res.json({
+            success: true,
+            data
+        });
+
+    } catch (err) {
+        console.error('Get confirmed interview error:', err);
+        next(err);
+    }
+};

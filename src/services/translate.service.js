@@ -1,4 +1,5 @@
 const { Translate } = require('@google-cloud/translate').v2;
+const { supabase } = require('../config/database');
 
 const translate = new Translate({
     key: process.env.GOOGLE_TRANSLATE_API_KEY
@@ -70,7 +71,34 @@ const translateBatch = async (texts, targetLang) => {
     return translations;
 };
 
+// DB에서 번역 가져오기
+const getDBTranslations = async (language) => {
+    try {
+        const { data, error } = await supabase
+            .from('translations')
+            .select('*')
+            .eq('language', language);
+
+        if (error) throw error;
+
+        // 캐시 형태로 변환
+        const cache = {};
+        if (data) {
+            data.forEach(item => {
+                const key = `${item.table_name}.${item.column_name}.${item.row_id}`;
+                cache[key] = item.translation;
+            });
+        }
+
+        return cache;
+    } catch (error) {
+        console.error('DB 번역 조회 오류:', error);
+        throw error;
+    }
+};
+
 module.exports = {
     translateText,
-    translateBatch
+    translateBatch,
+    getDBTranslations
 };

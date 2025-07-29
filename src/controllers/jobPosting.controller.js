@@ -172,11 +172,109 @@ const getMatchedPostings = async (req, res) => {
     }
 };
 
+const getCompanyJobPostings = async (req, res) => {
+    try {
+        const companyId = req.user.userId;
+        const data = await jobPostingService.getCompanyJobPostings(companyId);
+
+        res.status(200).json({
+            success: true,
+            data,
+            count: data.length
+        });
+    } catch (error) {
+        console.error('Get company job postings error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch company job postings',
+            error: error.message
+        });
+    }
+};
+
+const toggleJobPostingActive = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const companyId = req.user.userId;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Job posting ID is required'
+            });
+        }
+
+        // Verify ownership
+        const existingPosting = await jobPostingService.getJobPostingById(id);
+        if (!existingPosting || existingPosting.company_id !== companyId) {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized: You can only toggle your own job postings'
+            });
+        }
+
+        const data = await jobPostingService.toggleJobPostingActive(id, !existingPosting.is_active);
+
+        res.status(200).json({
+            success: true,
+            data,
+            message: 'Job posting status updated successfully'
+        });
+    } catch (error) {
+        console.error('Toggle job posting active error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to toggle job posting status',
+            error: error.message
+        });
+    }
+};
+
+const deleteJobPosting = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const companyId = req.user.userId;
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Job posting ID is required'
+            });
+        }
+
+        // Verify ownership
+        const existingPosting = await jobPostingService.getJobPostingById(id);
+        if (!existingPosting || existingPosting.company_id !== companyId) {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized: You can only delete your own job postings'
+            });
+        }
+
+        await jobPostingService.deleteJobPosting(id);
+
+        res.status(200).json({
+            success: true,
+            message: 'Job posting deleted successfully'
+        });
+    } catch (error) {
+        console.error('Delete job posting error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to delete job posting',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getActiveJobPostings,
     getJobPostingById,
     createJobPosting,
     updateJobPosting,
     getCompanyJobPostingsWithStatus,
-    getMatchedPostings
+    getMatchedPostings,
+    getCompanyJobPostings,
+    toggleJobPostingActive,
+    deleteJobPosting
 };

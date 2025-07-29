@@ -137,6 +137,16 @@ exports.createSchedule = async (proposalId, interviewSlotId) => {
 
 exports.getScheduleByProposal = async (proposalId) => {
     try {
+        console.log('Looking for interview schedule with proposal_id:', proposalId);
+        
+        // 먼저 해당 proposal_id로 모든 레코드를 확인
+        const { data: allSchedules } = await supabase
+            .from('interview_schedules')
+            .select('*')
+            .eq('proposal_id', proposalId);
+            
+        console.log('All schedules for proposal_id', proposalId, ':', allSchedules);
+        
         const { data, error } = await supabase
             .from('interview_schedules')
             .select(`
@@ -156,6 +166,8 @@ exports.getScheduleByProposal = async (proposalId) => {
             .eq('proposal_id', proposalId)
             .eq('status', 'confirmed')
             .single();
+            
+        console.log('Interview schedule query result:', { data, error });
 
         if (error && error.code !== 'PGRST116') throw error;
         return data;
