@@ -484,6 +484,7 @@ exports.cancelSchedule = async (scheduleId, companyId) => {
                     application:applications!interview_proposals_application_id_fkey (
                         id,
                         user_id,
+                        type,
                         user:profiles!applications_user_id_fkey (
                             id,
                             name
@@ -511,6 +512,9 @@ exports.cancelSchedule = async (scheduleId, companyId) => {
             throw new Error('권한이 없습니다.');
         }
 
+        // application type에 따라 다른 처리
+        const applicationType = schedule.proposal?.application?.type;
+        
         // 면접 일정 상태 업데이트
         const { error: updateError } = await supabase
             .from('interview_schedules')
@@ -519,13 +523,34 @@ exports.cancelSchedule = async (scheduleId, companyId) => {
 
         if (updateError) throw updateError;
 
-        // proposal 상태도 다시 pending으로 변경
-        const { error: proposalError } = await supabase
-            .from('interview_proposals')
-            .update({ status: 'pending' })
-            .eq('id', schedule.proposal_id);
 
-        if (proposalError) throw proposalError;
+
+        if (applicationType === 'user_initiated') {
+            // user_initiated인 경우: 기존 방식 그대로 proposal을 pending으로 변경
+            const { error: proposalError } = await supabase
+                .from('interview_proposals')
+                .update({ status: 'pending' })
+                .eq('id', schedule.proposal_id);
+
+            if (proposalError) throw proposalError;
+        } else if (applicationType === 'user_instant_interview' || applicationType === 'company_invited') {
+
+            // application 상태를 cancelled로 변경
+            const { error: applicationError } = await supabase
+                .from('applications')
+                .update({ status: 'cancelled' })
+                .eq('id', schedule.proposal.application.id);
+
+            if (applicationError) throw applicationError;
+
+            // user_instant_interview 또는 company_invited인 경우: proposal을 삭제
+            const { error: proposalDeleteError } = await supabase
+                .from('interview_proposals')
+                .delete()
+                .eq('id', schedule.proposal_id);
+
+            if (proposalDeleteError) throw proposalDeleteError;
+        }
 
         // 알림 발송을 위한 데이터 준비
         if (schedule.proposal?.application) {
