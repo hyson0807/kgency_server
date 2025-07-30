@@ -538,7 +538,7 @@ exports.cancelSchedule = async (scheduleId, companyId) => {
             // application 상태를 cancelled로 변경
             const { error: applicationError } = await supabase
                 .from('applications')
-                .update({ status: 'cancelled' })
+                .delete()
                 .eq('id', schedule.proposal.application.id);
 
             if (applicationError) throw applicationError;
