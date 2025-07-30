@@ -535,7 +535,7 @@ exports.cancelSchedule = async (scheduleId, companyId) => {
             if (proposalError) throw proposalError;
         } else if (applicationType === 'user_instant_interview' || applicationType === 'company_invited') {
 
-            // application 상태를 cancelled로 변경
+            // application 삭제
             const { error: applicationError } = await supabase
                 .from('applications')
                 .delete()
