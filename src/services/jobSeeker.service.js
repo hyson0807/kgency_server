@@ -140,9 +140,31 @@ class JobSeekerService {
                     }
                 });
 
+                // 근무요일 정렬을 위한 헬퍼 함수
+                const sortWorkDayKeywords = (keywords) => {
+                    const dayOrder = ['월', '화', '수', '목', '금', '토', '일'];
+                    return keywords.sort((a, b) => {
+                        const indexA = dayOrder.indexOf(a.keyword);
+                        const indexB = dayOrder.indexOf(b.keyword);
+                        
+                        if (indexA === -1 && indexB === -1) return 0;
+                        if (indexA === -1) return 1;
+                        if (indexB === -1) return -1;
+                        
+                        return indexA - indexB;
+                    });
+                };
+
+                // 근무요일 키워드를 월화수목금토일 순서로 정렬
+                const workDayKeywords = matchedKeywordDetails.filter(detail => detail.category === '근무요일');
+                const otherKeywords = matchedKeywordDetails.filter(detail => detail.category !== '근무요일');
+                const sortedWorkDayKeywords = sortWorkDayKeywords(workDayKeywords);
+                
+                const sortedMatchedKeywordDetails = [...otherKeywords, ...sortedWorkDayKeywords];
+
                 // 매칭된 키워드 텍스트 배열 생성
-                const matchedKeywords = matchedKeywordDetails.map(detail => detail.keyword);
-                const matchedKeywordsWithCategory = matchedKeywordDetails;
+                const matchedKeywords = sortedMatchedKeywordDetails.map(detail => detail.keyword);
+                const matchedKeywordsWithCategory = sortedMatchedKeywordDetails;
 
                 // 적합도 계산 (기존 방식 유지)
                 let suitability = undefined;

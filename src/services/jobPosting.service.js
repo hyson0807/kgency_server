@@ -295,6 +295,21 @@ exports.getMatchedPostingsForUser = async (userId) => {
                 workDay: []
             };
 
+            // 근무요일 정렬을 위한 헬퍼 함수
+            const sortWorkDayKeywords = (workDayKeywords) => {
+                const dayOrder = ['월', '화', '수', '목', '금', '토', '일'];
+                return workDayKeywords.sort((a, b) => {
+                    const indexA = dayOrder.indexOf(a.keyword);
+                    const indexB = dayOrder.indexOf(b.keyword);
+                    
+                    if (indexA === -1 && indexB === -1) return 0;
+                    if (indexA === -1) return 1;
+                    if (indexB === -1) return -1;
+                    
+                    return indexA - indexB;
+                });
+            };
+
             // 매칭된 키워드를 카테고리별로 분류
             matchedKeywordDetails.forEach(keywordObj => {
                 // 카테고리에 따라 분류 (이미 객체에 category 정보가 있음)
@@ -331,6 +346,9 @@ exports.getMatchedPostingsForUser = async (userId) => {
                         break;
                 }
             });
+
+            // 근무요일 키워드를 월화수목금토일 순서로 정렬
+            translatedMatchedKeywords.workDay = sortWorkDayKeywords(translatedMatchedKeywords.workDay);
 
             return {
                 posting: {
