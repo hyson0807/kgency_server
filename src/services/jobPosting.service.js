@@ -240,16 +240,25 @@ exports.getMatchedPostingsForUser = async (userId) => {
                         // 공고가 "상관없음"이면 사용자의 구체적인 키워드를 매칭으로 처리
                         userKeywordsInCategory.forEach(uk => {
                             if (uk.keyword?.keyword !== '상관없음') {
-                                // 중복 체크
-                                if (!matchedKeywordDetails.some(mkd => mkd === uk.keyword.keyword)) {
-                                    matchedKeywordDetails.push(uk.keyword.keyword);
+                                // 중복 체크 (ID 기준)
+                                if (!matchedKeywordDetails.some(mkd => mkd.id === uk.keyword.id)) {
+                                    matchedKeywordDetails.push({
+                                        id: uk.keyword.id,
+                                        keyword: uk.keyword.keyword,
+                                        category: uk.keyword.category
+                                    });
                                 }
                             }
                         });
                     } else if (userHasNoPreference && postingKeywordsInCategory.length > 0) {
                         // 사용자가 "상관없음"이면 "기타"로 표시
-                        if (!matchedKeywordDetails.some(mkd => mkd === '기타')) {
-                            matchedKeywordDetails.push('기타');
+                        const userAnyKeyword = userKeywordsInCategory.find(uk => uk.keyword.keyword === '상관없음');
+                        if (userAnyKeyword && !matchedKeywordDetails.some(mkd => mkd.keyword === '기타')) {
+                            matchedKeywordDetails.push({
+                                id: userAnyKeyword.keyword.id,
+                                keyword: '기타',
+                                category: userAnyKeyword.keyword.category
+                            });
                         }
                     }
                 } else {
@@ -259,9 +268,13 @@ exports.getMatchedPostingsForUser = async (userId) => {
                             uk => uk.keyword?.id === jpk.keyword?.id
                         );
                         if (matchingUserKeyword) {
-                            // 중복 체크
-                            if (!matchedKeywordDetails.some(mkd => mkd === matchingUserKeyword.keyword.keyword)) {
-                                matchedKeywordDetails.push(matchingUserKeyword.keyword.keyword);
+                            // 중복 체크 (ID 기준)
+                            if (!matchedKeywordDetails.some(mkd => mkd.id === matchingUserKeyword.keyword.id)) {
+                                matchedKeywordDetails.push({
+                                    id: matchingUserKeyword.keyword.id,
+                                    keyword: matchingUserKeyword.keyword.keyword,
+                                    category: matchingUserKeyword.keyword.category
+                                });
                             }
                         }
                     });
@@ -282,46 +295,35 @@ exports.getMatchedPostingsForUser = async (userId) => {
             };
 
             // 매칭된 키워드를 카테고리별로 분류
-            matchedKeywordDetails.forEach(keyword => {
-                // 키워드의 카테고리 찾기
-                let category = '';
-                const foundInUser = userKeywords?.find(uk => uk.keyword.keyword === keyword);
-                const foundInPosting = posting.job_posting_keywords?.find(jpk => jpk.keyword.keyword === keyword);
-                
-                if (foundInUser) {
-                    category = foundInUser.keyword.category;
-                } else if (foundInPosting) {
-                    category = foundInPosting.keyword.category;
-                }
-
-                // 카테고리에 따라 분류
-                switch (category) {
+            matchedKeywordDetails.forEach(keywordObj => {
+                // 카테고리에 따라 분류 (이미 객체에 category 정보가 있음)
+                switch (keywordObj.category) {
                     case '국가':
-                        translatedMatchedKeywords.countries.push(keyword);
+                        translatedMatchedKeywords.countries.push(keywordObj);
                         break;
                     case '직종':
-                        translatedMatchedKeywords.jobs.push(keyword);
+                        translatedMatchedKeywords.jobs.push(keywordObj);
                         break;
                     case '근무조건':
-                        translatedMatchedKeywords.conditions.push(keyword);
+                        translatedMatchedKeywords.conditions.push(keywordObj);
                         break;
                     case '지역':
-                        translatedMatchedKeywords.location.push(keyword);
+                        translatedMatchedKeywords.location.push(keywordObj);
                         break;
                     case '지역이동':
-                        translatedMatchedKeywords.moveable.push(keyword);
+                        translatedMatchedKeywords.moveable.push(keywordObj);
                         break;
                     case '성별':
-                        translatedMatchedKeywords.gender.push(keyword);
+                        translatedMatchedKeywords.gender.push(keywordObj);
                         break;
                     case '나이대':
-                        translatedMatchedKeywords.age.push(keyword);
+                        translatedMatchedKeywords.age.push(keywordObj);
                         break;
                     case '비자':
-                        translatedMatchedKeywords.visa.push(keyword);
+                        translatedMatchedKeywords.visa.push(keywordObj);
                         break;
                     case '한국어수준':
-                        translatedMatchedKeywords.koreanLevel.push(keyword);
+                        translatedMatchedKeywords.koreanLevel.push(keywordObj);
                         break;
                 }
             });
