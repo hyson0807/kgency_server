@@ -72,7 +72,7 @@ class JobSeekerService {
                 const matchedKeywordDetails = [];
 
                 // 카테고리별로 매칭 확인
-                const categories = ['국가', '직종', '근무조건', '지역', '지역이동', '성별', '나이대', '비자', '한국어수준'];
+                const categories = ['국가', '직종', '근무조건', '지역', '지역이동', '성별', '나이대', '비자', '한국어수준', '근무요일'];
                 
                 categories.forEach(category => {
                     // 회사의 해당 카테고리 키워드들

@@ -211,7 +211,7 @@ exports.getMatchedPostingsForUser = async (userId) => {
 
             // 수동 매칭 로직으로 중복 없는 매칭된 키워드 생성
             const matchedKeywordDetails = [];
-            const categories = ['국가', '직종', '근무조건', '지역', '지역이동', '성별', '나이대', '비자', '한국어수준'];
+            const categories = ['국가', '직종', '근무조건', '지역', '지역이동', '성별', '나이대', '비자', '한국어수준', '근무요일'];
             
             categories.forEach(category => {
                 // 공고의 해당 카테고리 키워드들
@@ -291,7 +291,8 @@ exports.getMatchedPostingsForUser = async (userId) => {
                 gender: [],
                 age: [],
                 visa: [],
-                koreanLevel: []
+                koreanLevel: [],
+                workDay: []
             };
 
             // 매칭된 키워드를 카테고리별로 분류
@@ -324,6 +325,9 @@ exports.getMatchedPostingsForUser = async (userId) => {
                         break;
                     case '한국어수준':
                         translatedMatchedKeywords.koreanLevel.push(keywordObj);
+                        break;
+                    case '근무요일':
+                        translatedMatchedKeywords.workDay.push(keywordObj);
                         break;
                 }
             });
