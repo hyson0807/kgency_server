@@ -61,22 +61,80 @@ class JobSeekerService {
                     uk => uk.keyword.id
                 ) || [];
 
-                // 매칭된 키워드 찾기
-                const matchedKeywordIds = companyKeywordIds.filter(ckId =>
-                    userKeywordIds.includes(ckId)
-                );
+                // "상관없음" 키워드를 고려한 매칭 로직
+                const matchedKeywordIds = [];
+                const matchedKeywordDetails = [];
 
-                // 매칭된 키워드 텍스트와 카테고리 정보 가져오기
-                const matchedKeywords = jobSeeker.user_keywords
-                    ?.filter(uk => matchedKeywordIds.includes(uk.keyword.id))
-                    .map(uk => uk.keyword.keyword) || [];
+                // 카테고리별로 매칭 확인
+                const categories = ['국가', '직종', '근무조건', '지역', '지역이동', '성별', '나이대', '비자', '한국어수준'];
+                
+                categories.forEach(category => {
+                    // 회사의 해당 카테고리 키워드들
+                    const companyKeywordsInCategory = companyKeywords?.filter(
+                        ck => ck.keyword?.category === category
+                    ) || [];
+                    
+                    // 사용자의 해당 카테고리 키워드들
+                    const userKeywordsInCategory = jobSeeker.user_keywords?.filter(
+                        uk => uk.keyword?.category === category
+                    ) || [];
 
-                const matchedKeywordsWithCategory = jobSeeker.user_keywords
-                    ?.filter(uk => matchedKeywordIds.includes(uk.keyword.id))
-                    .map(uk => ({
-                        keyword: uk.keyword.keyword,
-                        category: uk.keyword.category
-                    })) || [];
+                    // 회사가 "상관없음" 선택한 경우
+                    const companyHasNoPreference = companyKeywordsInCategory.some(
+                        ck => ck.keyword?.keyword === '상관없음'
+                    );
+
+                    // 사용자가 "상관없음" 선택한 경우
+                    const userHasNoPreference = userKeywordsInCategory.some(
+                        uk => uk.keyword?.keyword === '상관없음'
+                    );
+
+                    if (companyHasNoPreference || userHasNoPreference) {
+                        // "상관없음"이 있으면 해당 카테고리는 매칭으로 처리
+                        if (companyHasNoPreference && userKeywordsInCategory.length > 0) {
+                            // 회사가 "상관없음"이면 사용자의 구체적인 키워드를 매칭으로 처리
+                            userKeywordsInCategory.forEach(uk => {
+                                if (uk.keyword?.keyword !== '상관없음') {
+                                    matchedKeywordIds.push(uk.keyword.id);
+                                    matchedKeywordDetails.push({
+                                        keyword: uk.keyword.keyword,
+                                        category: uk.keyword.category
+                                    });
+                                }
+                            });
+                        } else if (userHasNoPreference && companyKeywordsInCategory.length > 0) {
+                            // 사용자가 "상관없음"이면 사용자의 "상관없음" 키워드를 매칭으로 처리
+                            const userNoPreferenceKeyword = userKeywordsInCategory.find(
+                                uk => uk.keyword?.keyword === '상관없음'
+                            );
+                            if (userNoPreferenceKeyword) {
+                                matchedKeywordIds.push(userNoPreferenceKeyword.keyword.id);
+                                matchedKeywordDetails.push({
+                                    keyword: userNoPreferenceKeyword.keyword.keyword,
+                                    category: userNoPreferenceKeyword.keyword.category
+                                });
+                            }
+                        }
+                    } else {
+                        // 일반적인 키워드 매칭 (직접 일치)
+                        companyKeywordsInCategory.forEach(ck => {
+                            const matchingUserKeyword = userKeywordsInCategory.find(
+                                uk => uk.keyword?.id === ck.keyword?.id
+                            );
+                            if (matchingUserKeyword) {
+                                matchedKeywordIds.push(matchingUserKeyword.keyword.id);
+                                matchedKeywordDetails.push({
+                                    keyword: matchingUserKeyword.keyword.keyword,
+                                    category: matchingUserKeyword.keyword.category
+                                });
+                            }
+                        });
+                    }
+                });
+
+                // 매칭된 키워드 텍스트 배열 생성
+                const matchedKeywords = matchedKeywordDetails.map(detail => detail.keyword);
+                const matchedKeywordsWithCategory = matchedKeywordDetails;
 
                 // 적합도 계산
                 let suitability = undefined;

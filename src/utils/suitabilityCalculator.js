@@ -15,6 +15,32 @@ class SuitabilityCalculator {
     }
 
     /**
+     * 특정 카테고리에서 "상관없음" 키워드 ID 찾기
+     */
+    findNoPreferenceKeywordId(jobKeywords, category) {
+        const noPreferenceKeyword = jobKeywords.find(k => 
+            k.keyword.category === category && k.keyword.keyword === '상관없음'
+        );
+        return noPreferenceKeyword ? noPreferenceKeyword.keyword.id : null;
+    }
+
+    /**
+     * 유저 또는 공고에서 "상관없음"이 선택되었는지 확인
+     */
+    isNoPreferenceSelected(userKeywordIds, jobKeywords, category) {
+        const noPreferenceId = this.findNoPreferenceKeywordId(jobKeywords, category);
+        
+        if (!noPreferenceId) {
+            return { userHasNoPreference: false, jobHasNoPreference: false, noPreferenceId: null };
+        }
+
+        const userHasNoPreference = userKeywordIds.includes(noPreferenceId);
+        const jobHasNoPreference = jobKeywords.some(k => k.keyword.id === noPreferenceId);
+
+        return { userHasNoPreference, jobHasNoPreference, noPreferenceId };
+    }
+
+    /**
      * 적합도 계산 메인 함수
      */
     calculate(userKeywordIds, jobKeywords) {
@@ -171,7 +197,21 @@ class SuitabilityCalculator {
     }
 
     calculateKoreanLevelMatch(userKeywordIds, jobKeywords, matchedKeywords) {
-        const koreanKeywordsInPosting = jobKeywords.filter(k => k.keyword.category === '한국어수준');
+        // "상관없음" 키워드 확인
+        const { userHasNoPreference, jobHasNoPreference, noPreferenceId } = 
+            this.isNoPreferenceSelected(userKeywordIds, jobKeywords, '한국어수준');
+
+        // 유저나 공고 중 하나라도 "상관없음"이면 만점
+        if (userHasNoPreference || jobHasNoPreference) {
+            if (userHasNoPreference) {
+                matchedKeywords.koreanLevel?.push('상관없음');
+            }
+            return { matched: 1, total: 1, score: 5 };
+        }
+
+        const koreanKeywordsInPosting = jobKeywords.filter(k => 
+            k.keyword.category === '한국어수준' && k.keyword.keyword !== '상관없음'
+        );
 
         if (koreanKeywordsInPosting.length === 0) {
             return { matched: 0, total: 0, score: 0 };
@@ -184,7 +224,9 @@ class SuitabilityCalculator {
         };
 
         const userKoreanLevel = jobKeywords.find(k =>
-            k.keyword.category === '한국어수준' && userKeywordIds.includes(k.keyword.id)
+            k.keyword.category === '한국어수준' && 
+            k.keyword.keyword !== '상관없음' && 
+            userKeywordIds.includes(k.keyword.id)
         );
 
         if (!userKoreanLevel) {
@@ -215,9 +257,25 @@ class SuitabilityCalculator {
     }
 
     calculateVisaMatch(userKeywordIds, jobKeywords, matchedKeywords) {
-        const visaKeywordsInPosting = jobKeywords.filter(k => k.keyword.category === '비자');
+        // "상관없음" 키워드 확인
+        const { userHasNoPreference, jobHasNoPreference, noPreferenceId } = 
+            this.isNoPreferenceSelected(userKeywordIds, jobKeywords, '비자');
+
+        // 유저나 공고 중 하나라도 "상관없음"이면 만점
+        if (userHasNoPreference || jobHasNoPreference) {
+            if (userHasNoPreference) {
+                matchedKeywords.visa.push('상관없음');
+            }
+            return { matched: 1, total: 1, score: 5 };
+        }
+
+        const visaKeywordsInPosting = jobKeywords.filter(k => 
+            k.keyword.category === '비자' && k.keyword.keyword !== '상관없음'
+        );
         const userVisa = jobKeywords.find(k =>
-            k.keyword.category === '비자' && userKeywordIds.includes(k.keyword.id)
+            k.keyword.category === '비자' && 
+            k.keyword.keyword !== '상관없음' && 
+            userKeywordIds.includes(k.keyword.id)
         );
 
         if (visaKeywordsInPosting.length === 0) {
@@ -233,7 +291,21 @@ class SuitabilityCalculator {
     }
 
     calculateGenderMatch(userKeywordIds, jobKeywords, matchedKeywords) {
-        const genderKeywordsInPosting = jobKeywords.filter(k => k.keyword.category === '성별');
+        // "상관없음" 키워드 확인
+        const { userHasNoPreference, jobHasNoPreference, noPreferenceId } = 
+            this.isNoPreferenceSelected(userKeywordIds, jobKeywords, '성별');
+
+        // 유저나 공고 중 하나라도 "상관없음"이면 만점
+        if (userHasNoPreference || jobHasNoPreference) {
+            if (userHasNoPreference) {
+                matchedKeywords.gender.push('상관없음');
+            }
+            return { matched: 1, total: 1, score: 4 };
+        }
+
+        const genderKeywordsInPosting = jobKeywords.filter(k => 
+            k.keyword.category === '성별' && k.keyword.keyword !== '상관없음'
+        );
 
         if (genderKeywordsInPosting.length === 0) {
             return { matched: 1, total: 1, score: 4 };
@@ -252,14 +324,27 @@ class SuitabilityCalculator {
     }
 
     checkGenderMatchRequired(userKeywordIds, jobKeywords, matchedKeywords) {
-        const genderKeywordsInPosting = jobKeywords.filter(k => k.keyword.category === '성별');
+        // "상관없음" 키워드 확인
+        const { userHasNoPreference, jobHasNoPreference, noPreferenceId } = 
+            this.isNoPreferenceSelected(userKeywordIds, jobKeywords, '성별');
+
+        // 유저나 공고 중 하나라도 "상관없음"이면 매칭으로 처리
+        if (userHasNoPreference || jobHasNoPreference) {
+            return { matched: 1, total: 1, score: 0 };
+        }
+
+        const genderKeywordsInPosting = jobKeywords.filter(k => 
+            k.keyword.category === '성별' && k.keyword.keyword !== '상관없음'
+        );
 
         if (genderKeywordsInPosting.length === 0) {
             return { matched: 1, total: 1, score: 0 };
         }
 
         const userGenderKeyword = jobKeywords.find(k =>
-            k.keyword.category === '성별' && userKeywordIds.includes(k.keyword.id)
+            k.keyword.category === '성별' && 
+            k.keyword.keyword !== '상관없음' && 
+            userKeywordIds.includes(k.keyword.id)
         );
 
         if (!userGenderKeyword) {
@@ -278,14 +363,30 @@ class SuitabilityCalculator {
     }
 
     calculateAgeMatch(userKeywordIds, jobKeywords, matchedKeywords) {
-        const ageKeywordsInPosting = jobKeywords.filter(k => k.keyword.category === '나이대');
+        // "상관없음" 키워드 확인
+        const { userHasNoPreference, jobHasNoPreference, noPreferenceId } = 
+            this.isNoPreferenceSelected(userKeywordIds, jobKeywords, '나이대');
+
+        // 유저나 공고 중 하나라도 "상관없음"이면 만점
+        if (userHasNoPreference || jobHasNoPreference) {
+            if (userHasNoPreference) {
+                matchedKeywords.age.push('상관없음');
+            }
+            return { matched: 1, total: 1, score: 3 };
+        }
+
+        const ageKeywordsInPosting = jobKeywords.filter(k => 
+            k.keyword.category === '나이대' && k.keyword.keyword !== '상관없음'
+        );
 
         if (ageKeywordsInPosting.length === 0) {
             return { matched: 1, total: 1, score: 3 };
         }
 
         const userAge = jobKeywords.find(k =>
-            k.keyword.category === '나이대' && userKeywordIds.includes(k.keyword.id)
+            k.keyword.category === '나이대' && 
+            k.keyword.keyword !== '상관없음' && 
+            userKeywordIds.includes(k.keyword.id)
         );
 
         if (!userAge) {
@@ -340,7 +441,21 @@ class SuitabilityCalculator {
     }
 
     calculateCountryMatch(userKeywordIds, jobKeywords, matchedKeywords) {
-        const countryKeywordsInPosting = jobKeywords.filter(k => k.keyword.category === '국가');
+        // "상관없음" 키워드 확인
+        const { userHasNoPreference, jobHasNoPreference, noPreferenceId } = 
+            this.isNoPreferenceSelected(userKeywordIds, jobKeywords, '국가');
+
+        // 유저나 공고 중 하나라도 "상관없음"이면 만점
+        if (userHasNoPreference || jobHasNoPreference) {
+            if (userHasNoPreference) {
+                matchedKeywords.countries.push('상관없음');
+            }
+            return { matched: 1, total: 1, score: 2 };
+        }
+
+        const countryKeywordsInPosting = jobKeywords.filter(k => 
+            k.keyword.category === '국가' && k.keyword.keyword !== '상관없음'
+        );
 
         if (countryKeywordsInPosting.length === 0) {
             return { matched: 1, total: 1, score: 2 };
