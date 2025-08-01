@@ -6,6 +6,12 @@ class JobSeekerService {
         this.calculator = new SuitabilityCalculator();
     }
 
+    // 키워드의 카테고리를 찾는 헬퍼 메서드
+    getKeywordCategory(keyword, userKeywords) {
+        const found = userKeywords?.find(uk => uk.keyword.keyword === keyword);
+        return found?.keyword.category || '';
+    }
+
     async getMatchedJobSeekers(companyId) {
         try {
             console.log('Fetching matched job seekers for company:', companyId);
@@ -95,23 +101,22 @@ class JobSeekerService {
                             // 회사가 "상관없음"이면 사용자의 구체적인 키워드를 매칭으로 처리
                             userKeywordsInCategory.forEach(uk => {
                                 if (uk.keyword?.keyword !== '상관없음') {
-                                    matchedKeywordIds.push(uk.keyword.id);
-                                    matchedKeywordDetails.push({
-                                        keyword: uk.keyword.keyword,
-                                        category: uk.keyword.category
-                                    });
+                                    // 중복 체크
+                                    if (!matchedKeywordIds.includes(uk.keyword.id)) {
+                                        matchedKeywordIds.push(uk.keyword.id);
+                                        matchedKeywordDetails.push({
+                                            keyword: uk.keyword.keyword,
+                                            category: uk.keyword.category
+                                        });
+                                    }
                                 }
                             });
                         } else if (userHasNoPreference && companyKeywordsInCategory.length > 0) {
-                            // 사용자가 "상관없음"이면 사용자의 "상관없음" 키워드를 매칭으로 처리
-                            const userNoPreferenceKeyword = userKeywordsInCategory.find(
-                                uk => uk.keyword?.keyword === '상관없음'
-                            );
-                            if (userNoPreferenceKeyword) {
-                                matchedKeywordIds.push(userNoPreferenceKeyword.keyword.id);
+                            // 사용자가 "상관없음"이면 "기타"로 표시
+                            if (!matchedKeywordDetails.some(mkd => mkd.keyword === '기타' && mkd.category === category)) {
                                 matchedKeywordDetails.push({
-                                    keyword: userNoPreferenceKeyword.keyword.keyword,
-                                    category: userNoPreferenceKeyword.keyword.category
+                                    keyword: '기타',
+                                    category: category
                                 });
                             }
                         }
@@ -122,11 +127,14 @@ class JobSeekerService {
                                 uk => uk.keyword?.id === ck.keyword?.id
                             );
                             if (matchingUserKeyword) {
-                                matchedKeywordIds.push(matchingUserKeyword.keyword.id);
-                                matchedKeywordDetails.push({
-                                    keyword: matchingUserKeyword.keyword.keyword,
-                                    category: matchingUserKeyword.keyword.category
-                                });
+                                // 중복 체크
+                                if (!matchedKeywordIds.includes(matchingUserKeyword.keyword.id)) {
+                                    matchedKeywordIds.push(matchingUserKeyword.keyword.id);
+                                    matchedKeywordDetails.push({
+                                        keyword: matchingUserKeyword.keyword.keyword,
+                                        category: matchingUserKeyword.keyword.category
+                                    });
+                                }
                             }
                         });
                     }
@@ -136,7 +144,7 @@ class JobSeekerService {
                 const matchedKeywords = matchedKeywordDetails.map(detail => detail.keyword);
                 const matchedKeywordsWithCategory = matchedKeywordDetails;
 
-                // 적합도 계산
+                // 적합도 계산 (기존 방식 유지)
                 let suitability = undefined;
                 if (companyKeywordsForCalculator.length > 0) {
                     suitability = this.calculator.calculate(userKeywordIds, companyKeywordsForCalculator);
@@ -147,7 +155,7 @@ class JobSeekerService {
 
                 return {
                     user: cleanJobSeeker,
-                    matchedCount: matchedKeywordIds.length,
+                    matchedCount: matchedKeywords.length,
                     matchedKeywords,
                     matchedKeywordsWithCategory,
                     suitability

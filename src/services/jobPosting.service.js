@@ -143,10 +143,17 @@ exports.getMatchedPostingsForUser = async (userId) => {
     try {
         console.log('Getting matched postings for user:', userId);
 
-        // 1. 사용자 키워드 조회
+        // 1. 사용자 키워드 조회 (키워드 상세 정보 포함)
         const { data: userKeywords, error: keywordError } = await supabase
             .from('user_keyword')
-            .select('keyword_id')
+            .select(`
+                keyword_id,
+                keyword:keyword_id (
+                    id,
+                    keyword,
+                    category
+                )
+            `)
             .eq('user_id', userId);
 
         if (keywordError) throw keywordError;
@@ -196,13 +203,72 @@ exports.getMatchedPostingsForUser = async (userId) => {
         const calculator = new SuitabilityCalculator();
 
         const matchedPostings = jobPostings.map(posting => {
-            // 적합도 계산
+            // 적합도 계산 (공고 키워드만 사용)
             const suitability = calculator.calculate(
                 userKeywordIds,
                 posting.job_posting_keywords || []
             );
 
-            // 번역된 키워드 매칭 (간단한 버전)
+            // 수동 매칭 로직으로 중복 없는 매칭된 키워드 생성
+            const matchedKeywordDetails = [];
+            const categories = ['국가', '직종', '근무조건', '지역', '지역이동', '성별', '나이대', '비자', '한국어수준'];
+            
+            categories.forEach(category => {
+                // 공고의 해당 카테고리 키워드들
+                const postingKeywordsInCategory = posting.job_posting_keywords?.filter(
+                    jpk => jpk.keyword?.category === category
+                ) || [];
+                
+                // 사용자의 해당 카테고리 키워드들
+                const userKeywordsInCategory = userKeywords?.filter(
+                    uk => uk.keyword?.category === category
+                ) || [];
+
+                // 공고가 "상관없음" 선택한 경우
+                const postingHasNoPreference = postingKeywordsInCategory.some(
+                    jpk => jpk.keyword?.keyword === '상관없음'
+                );
+
+                // 사용자가 "상관없음" 선택한 경우
+                const userHasNoPreference = userKeywordsInCategory.some(
+                    uk => uk.keyword?.keyword === '상관없음'
+                );
+
+                if (postingHasNoPreference || userHasNoPreference) {
+                    // "상관없음"이 있으면 해당 카테고리는 매칭으로 처리
+                    if (postingHasNoPreference && userKeywordsInCategory.length > 0) {
+                        // 공고가 "상관없음"이면 사용자의 구체적인 키워드를 매칭으로 처리
+                        userKeywordsInCategory.forEach(uk => {
+                            if (uk.keyword?.keyword !== '상관없음') {
+                                // 중복 체크
+                                if (!matchedKeywordDetails.some(mkd => mkd === uk.keyword.keyword)) {
+                                    matchedKeywordDetails.push(uk.keyword.keyword);
+                                }
+                            }
+                        });
+                    } else if (userHasNoPreference && postingKeywordsInCategory.length > 0) {
+                        // 사용자가 "상관없음"이면 "기타"로 표시
+                        if (!matchedKeywordDetails.some(mkd => mkd === '기타')) {
+                            matchedKeywordDetails.push('기타');
+                        }
+                    }
+                } else {
+                    // 일반적인 키워드 매칭 (직접 일치)
+                    postingKeywordsInCategory.forEach(jpk => {
+                        const matchingUserKeyword = userKeywordsInCategory.find(
+                            uk => uk.keyword?.id === jpk.keyword?.id
+                        );
+                        if (matchingUserKeyword) {
+                            // 중복 체크
+                            if (!matchedKeywordDetails.some(mkd => mkd === matchingUserKeyword.keyword.keyword)) {
+                                matchedKeywordDetails.push(matchingUserKeyword.keyword.keyword);
+                            }
+                        }
+                    });
+                }
+            });
+
+            // 카테고리별로 분류
             const translatedMatchedKeywords = {
                 countries: [],
                 jobs: [],
@@ -215,39 +281,48 @@ exports.getMatchedPostingsForUser = async (userId) => {
                 koreanLevel: []
             };
 
-            // 매칭된 키워드 분류
-            posting.job_posting_keywords?.forEach(jpk => {
-                if (userKeywordIds.includes(jpk.keyword.id)) {
-                    const keyword = jpk.keyword.keyword;
-                    switch (jpk.keyword.category) {
-                        case '국가':
-                            translatedMatchedKeywords.countries.push(keyword);
-                            break;
-                        case '직종':
-                            translatedMatchedKeywords.jobs.push(keyword);
-                            break;
-                        case '근무조건':
-                            translatedMatchedKeywords.conditions.push(keyword);
-                            break;
-                        case '지역':
-                            translatedMatchedKeywords.location.push(keyword);
-                            break;
-                        case '지역이동':
-                            translatedMatchedKeywords.moveable.push(keyword);
-                            break;
-                        case '성별':
-                            translatedMatchedKeywords.gender.push(keyword);
-                            break;
-                        case '나이대':
-                            translatedMatchedKeywords.age.push(keyword);
-                            break;
-                        case '비자':
-                            translatedMatchedKeywords.visa.push(keyword);
-                            break;
-                        case '한국어수준':
-                            translatedMatchedKeywords.koreanLevel.push(keyword);
-                            break;
-                    }
+            // 매칭된 키워드를 카테고리별로 분류
+            matchedKeywordDetails.forEach(keyword => {
+                // 키워드의 카테고리 찾기
+                let category = '';
+                const foundInUser = userKeywords?.find(uk => uk.keyword.keyword === keyword);
+                const foundInPosting = posting.job_posting_keywords?.find(jpk => jpk.keyword.keyword === keyword);
+                
+                if (foundInUser) {
+                    category = foundInUser.keyword.category;
+                } else if (foundInPosting) {
+                    category = foundInPosting.keyword.category;
+                }
+
+                // 카테고리에 따라 분류
+                switch (category) {
+                    case '국가':
+                        translatedMatchedKeywords.countries.push(keyword);
+                        break;
+                    case '직종':
+                        translatedMatchedKeywords.jobs.push(keyword);
+                        break;
+                    case '근무조건':
+                        translatedMatchedKeywords.conditions.push(keyword);
+                        break;
+                    case '지역':
+                        translatedMatchedKeywords.location.push(keyword);
+                        break;
+                    case '지역이동':
+                        translatedMatchedKeywords.moveable.push(keyword);
+                        break;
+                    case '성별':
+                        translatedMatchedKeywords.gender.push(keyword);
+                        break;
+                    case '나이대':
+                        translatedMatchedKeywords.age.push(keyword);
+                        break;
+                    case '비자':
+                        translatedMatchedKeywords.visa.push(keyword);
+                        break;
+                    case '한국어수준':
+                        translatedMatchedKeywords.koreanLevel.push(keyword);
+                        break;
                 }
             });
 
