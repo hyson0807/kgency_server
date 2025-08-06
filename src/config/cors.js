@@ -5,6 +5,9 @@ const corsOptions = {
             const allowedPatterns = [
                 /^https:\/\/.*\.expo\.app$/,     // Expo 앱 도메인
                 /^https:\/\/.*\.expo\.dev$/,     // Expo 개발 도메인
+                /^https:\/\/.*\.expo\.direct$/,  // Expo direct 도메인 추가
+                /^https:\/\/.*\.exp\.direct$/,   // Expo exp.direct 도메인 추가
+                /^https:\/\/.*\.expo-website\.com$/, // Expo website 도메인
                 /^exp:\/\/.*/,                    // Expo 프로토콜
                 /^https:\/\/kgency.*\.expo\.app$/, // 특정 kgency 앱
                 /^capacitor:\/\/localhost/,      // iOS 앱
@@ -30,7 +33,7 @@ const corsOptions = {
                 callback(null, true); // 일단 허용하되 로그 남김
             }
         }
-        : ['http://localhost:3000', 'http://localhost:8081'],
+        : ['http://localhost:3000', 'http://localhost:8081', 'http://localhost:19006'],
     credentials: true,
     optionsSuccessStatus: 200
 };
