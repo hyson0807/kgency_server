@@ -31,7 +31,7 @@ const sendOTP = async (req, res) => {
 // OTP 검증 및 로그인/회원가입
 const verifyOTP = async (req, res) => {
     try {
-        const { phone, otp, userType } = req.body;
+        const { phone, otp, userType, isDemoAccount } = req.body;
 
         if (!phone || !otp) {
             return res.status(400).json({
@@ -40,7 +40,7 @@ const verifyOTP = async (req, res) => {
             });
         }
 
-        const result = await authService.verifyOTP(phone, otp, userType);
+        const result = await authService.verifyOTP(phone, otp, userType, isDemoAccount);
 
         res.json({
             success: true,

@@ -32,8 +32,22 @@ const sendOTP = async (phone) => {
 };
 
 // OTP 검증 및 인증
-const verifyOTP = async (phone, otp, userType) => {
-    console.log('OTP 검증:', phone, otp, userType);
+const verifyOTP = async (phone, otp, userType, isDemoAccount = false) => {
+    console.log('OTP 검증:', phone, otp, userType, isDemoAccount);
+
+    // 애플 심사용 데모 계정 처리
+    const demoAccounts = {
+        '+821099999999': { name: '애플 심사 구직자', type: 'user', validOtp: '999999' },
+        '+821088888888': { name: '애플 심사 회사', type: 'company', validOtp: '888888' }
+    };
+    
+    // 데모 계정 체크 (프로덕션에서도 동작)
+    if (isDemoAccount && demoAccounts[phone]) {
+        const demoInfo = demoAccounts[phone];
+        if (otp === demoInfo.validOtp && userType === demoInfo.type) {
+            return handleDemoAccount(phone, demoInfo);
+        }
+    }
 
     // 개발 모드 테스트 계정 처리
     const isDevelopment = process.env.NODE_ENV !== 'production';
@@ -67,6 +81,50 @@ const verifyOTP = async (phone, otp, userType) => {
 
     // 실제 인증 처리
     return handleAuthentication(phone, userType);
+};
+
+// 애플 심사용 데모 계정 처리
+const handleDemoAccount = async (phone, demoInfo) => {
+    const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('phone_number', phone)
+        .single();
+
+    if (existingUser) {
+        // 데모 계정도 userType 검증
+        if (existingUser.user_type !== demoInfo.type) {
+            throw new Error(
+                existingUser.user_type === 'user'
+                    ? '구직자 계정입니다. 구직자 로그인을 이용해주세요.'
+                    : '구인자 계정입니다. 구인자 로그인을 이용해주세요.'
+            );
+        }
+
+        // 기존 데모 유저 로그인
+        const token = jwt.sign({
+            userId: existingUser.id,
+            phone: phone,
+            userType: demoInfo.type
+        }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+        return {
+            token,
+            user: {
+                userId: existingUser.id,
+                phone: phone,
+                userType: demoInfo.type,
+                isNewUser: false
+            },
+            onboardingStatus: {
+                completed: existingUser.onboarding_completed || false
+            },
+            message: '데모 계정으로 로그인되었습니다'
+        };
+    }
+
+    // 신규 데모 유저 생성
+    return createNewUser(phone, demoInfo.type, demoInfo.name);
 };
 
 // 테스트 계정 처리
