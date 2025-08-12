@@ -1,4 +1,5 @@
 const applicationService = require('../services/application.service');
+const purchaseService = require('../services/purchase.service');
 const { supabase } = require('../config/database');
 
 // 중복 지원 확인
@@ -95,13 +96,41 @@ exports.createApplication = async (req, res) => {
 exports.createInstantInterviewApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { companyId, jobPostingId } = req.body;
+        const { companyId, jobPostingId, useToken } = req.body;
 
         if (!companyId || !jobPostingId) {
             return res.status(400).json({
                 success: false,
                 error: 'companyId와 jobPostingId가 필요합니다.'
             });
+        }
+
+        let tokenTransactionId = null;
+
+        // 토큰 사용이 요청된 경우 토큰 차감
+        if (useToken) {
+            try {
+                const tokenResult = await purchaseService.spendTokens(
+                    userId,
+                    1, // 즉시면접 1회 = 토큰 1개
+                    '즉시면접 예약'
+                );
+                tokenTransactionId = tokenResult.transactionId;
+            } catch (tokenError) {
+                console.error('토큰 사용 실패:', tokenError);
+                
+                if (tokenError.message.includes('Insufficient tokens')) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '토큰이 부족합니다. 상점에서 토큰을 구매해주세요.'
+                    });
+                }
+                
+                return res.status(500).json({
+                    success: false,
+                    error: '토큰 처리 중 오류가 발생했습니다.'
+                });
+            }
         }
 
         // 지원서 생성 (이력서 없이, 바로 scheduled 상태로)
@@ -112,7 +141,9 @@ exports.createInstantInterviewApplication = async (req, res) => {
                 company_id: companyId,
                 job_posting_id: jobPostingId,
                 type: 'user_instant_interview',
-                status: 'scheduled' // 바로 scheduled 상태로
+                status: 'scheduled', // 바로 scheduled 상태로
+                token_used: useToken || false,
+                token_transaction_id: tokenTransactionId
             })
             .select()
             .single();
@@ -130,7 +161,9 @@ exports.createInstantInterviewApplication = async (req, res) => {
         res.json({
             success: true,
             data: application,
-            message: '인스턴트 면접 지원서가 성공적으로 생성되었습니다.'
+            message: useToken 
+                ? '인스턴트 면접 지원서가 성공적으로 생성되었습니다. 토큰 1개가 사용되었습니다.'
+                : '인스턴트 면접 지원서가 성공적으로 생성되었습니다.'
         });
 
     } catch (error) {

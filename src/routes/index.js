@@ -17,6 +17,7 @@ const profileRoutes = require('./profile.routes');
 const messageRoutes = require('./message.routes');
 const userRoutes = require('./user.routes');
 const jobSeekerRoutes = require('./jobSeeker.routes');
+const purchaseRoutes = require('./purchase.routes');
 const healthController = require('../controllers/health.controller');
 
 
@@ -54,6 +55,8 @@ router.use('/job-seekers', jobSeekerRoutes);
 router.use('/company/interview-slots', interviewSlotRoutes);
 router.use('/interview-proposals', interviewRoutes);
 router.use('/interview-schedules', interviewScheduleRoutes);
+
+router.use('/purchase', purchaseRoutes);
 
 // 404 처리
 router.use((req, res) => {
