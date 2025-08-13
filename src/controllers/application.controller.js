@@ -1,5 +1,6 @@
 const applicationService = require('../services/application.service');
 const purchaseService = require('../services/purchase.service');
+const notificationService = require('../services/notification.service');
 const { supabase } = require('../config/database');
 
 // 중복 지원 확인
@@ -75,6 +76,40 @@ exports.createApplication = async (req, res) => {
                 });
             }
             throw appError;
+        }
+
+        // 알림 발송을 위한 데이터 조회
+        try {
+            const { data: applicationData, error: dataError } = await supabase
+                .from('applications')
+                .select(`
+                    id,
+                    user:profiles!user_id (
+                        id,
+                        name
+                    ),
+                    job_posting:job_postings!job_posting_id (
+                        id,
+                        title
+                    )
+                `)
+                .eq('id', application.id)
+                .single();
+
+            if (!dataError && applicationData) {
+                // 회사에게 새로운 일반지원 알림 발송
+                await notificationService.sendNewApplicationNotification(
+                    companyId,
+                    applicationData.user.name,
+                    applicationData.job_posting.title,
+                    'regular',
+                    applicationData.id
+                );
+                console.log('New regular application notification sent to company');
+            }
+        } catch (notificationError) {
+            // 알림 발송 실패해도 지원서 생성은 성공으로 처리
+            console.error('Failed to send regular application notification:', notificationError);
         }
 
         res.json({
@@ -156,6 +191,40 @@ exports.createInstantInterviewApplication = async (req, res) => {
                 });
             }
             throw appError;
+        }
+
+        // 알림 발송을 위한 데이터 조회
+        try {
+            const { data: applicationData, error: dataError } = await supabase
+                .from('applications')
+                .select(`
+                    id,
+                    user:profiles!user_id (
+                        id,
+                        name
+                    ),
+                    job_posting:job_postings!job_posting_id (
+                        id,
+                        title
+                    )
+                `)
+                .eq('id', application.id)
+                .single();
+
+            if (!dataError && applicationData) {
+                // 회사에게 새로운 즉시면접 지원 알림 발송
+                await notificationService.sendNewApplicationNotification(
+                    companyId,
+                    applicationData.user.name,
+                    applicationData.job_posting.title,
+                    'instant_interview',
+                    applicationData.id
+                );
+                console.log('New instant interview application notification sent to company');
+            }
+        } catch (notificationError) {
+            // 알림 발송 실패해도 지원서 생성은 성공으로 처리
+            console.error('Failed to send instant interview application notification:', notificationError);
         }
 
         res.json({

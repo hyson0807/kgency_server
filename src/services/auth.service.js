@@ -24,7 +24,7 @@ const sendOTP = async (phone) => {
     const result = await messageService.send({
         'to': phone,
         'from': process.env.SENDER_PHONE,
-        'text': `verification: ${otp}`
+        'text': `인증번호: ${otp}`
     });
 
     console.log('SMS 발송 성공:', result);
