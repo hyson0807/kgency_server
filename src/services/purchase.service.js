@@ -84,6 +84,13 @@ class PurchaseService {
 
   async verifyGoogleReceipt(purchaseToken, userId, productId = 'token_5_pack_android') {
     try {
+      console.log('=== Google Receipt Verification ===');
+      console.log('Purchase Token:', purchaseToken);
+      console.log('Product ID:', productId);
+      console.log('Package Name:', process.env.GOOGLE_PACKAGE_NAME);
+      console.log('Service Account Email:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ? 'Present' : 'Missing');
+      console.log('Private Key:', process.env.GOOGLE_PRIVATE_KEY ? 'Present' : 'Missing');
+      
       const response = await this.androidPublisher.purchases.products.get({
         packageName: process.env.GOOGLE_PACKAGE_NAME,
         productId: productId,
@@ -92,6 +99,7 @@ class PurchaseService {
       });
 
       const purchase = response.data;
+      console.log('Google Play API Response:', JSON.stringify(purchase, null, 2));
       
       if (purchase.purchaseState !== 0) { // 0 = purchased
         throw new Error('Purchase not in purchased state');
@@ -106,6 +114,12 @@ class PurchaseService {
       };
     } catch (error) {
       console.error('Google receipt verification failed:', error);
+      console.error('Error details:', {
+        message: error.message,
+        status: error.status,
+        statusText: error.statusText,
+        response: error.response?.data
+      });
       return { isValid: false, error: error.message };
     }
   }
