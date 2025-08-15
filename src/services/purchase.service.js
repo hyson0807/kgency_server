@@ -82,11 +82,11 @@ class PurchaseService {
     }
   }
 
-  async verifyGoogleReceipt(purchaseToken, userId) {
+  async verifyGoogleReceipt(purchaseToken, userId, productId = 'token_5_pack_android') {
     try {
       const response = await this.androidPublisher.purchases.products.get({
         packageName: process.env.GOOGLE_PACKAGE_NAME,
-        productId: 'token_5_pack',
+        productId: productId,
         token: purchaseToken,
         auth: this.googleAuth
       });
@@ -100,7 +100,7 @@ class PurchaseService {
       return {
         isValid: true,
         transactionId: purchase.orderId,
-        productId: 'token_5_pack',
+        productId: productId,
         purchaseDate: new Date(parseInt(purchase.purchaseTimeMillis)),
         verificationData: purchase
       };
@@ -112,12 +112,13 @@ class PurchaseService {
 
   async processPurchase(userId, platform, receiptData, purchaseToken) {
     try {
-      // 1. 영수증 검증
+      // 1. 영수증 검증 - 플랫폼별 제품 ID 전달
       let verificationResult;
       if (platform === 'ios') {
         verificationResult = await this.verifyAppleReceipt(receiptData, userId);
       } else if (platform === 'android') {
-        verificationResult = await this.verifyGoogleReceipt(purchaseToken, userId);
+        // Android의 경우 token_5_pack_android 제품 ID로 검증
+        verificationResult = await this.verifyGoogleReceipt(purchaseToken, userId, 'token_5_pack_android');
       } else {
         throw new Error('Invalid platform');
       }
@@ -159,7 +160,7 @@ class PurchaseService {
       if (purchaseError) throw purchaseError;
 
       // 4. 토큰 지급
-      await this.addTokensToUser(userId, 5, purchase.id);
+      await this.addTokensToUser(userId, 5, purchase.id, verificationResult.productId);
 
       return {
         success: true,
@@ -173,7 +174,7 @@ class PurchaseService {
     }
   }
 
-  async addTokensToUser(userId, amount, purchaseId) {
+  async addTokensToUser(userId, amount, purchaseId, productId = null) {
     try {
       // 1. 사용자 토큰 잔액 업데이트 (UPSERT)
       const { data: currentTokens } = await supabase
@@ -204,7 +205,7 @@ class PurchaseService {
           type: 'purchase',
           reference_id: purchaseId,
           description: `토큰 ${amount}개 구매`,
-          metadata: { product_id: 'token_5_pack', purchase_id: purchaseId }
+          metadata: { product_id: productId || 'token_5_pack', purchase_id: purchaseId }
         });
 
       if (transactionError) throw transactionError;
