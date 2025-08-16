@@ -68,21 +68,21 @@ class SuitabilityCalculator {
         const locationMatch = this.checkLocationMatch(userKeywordIds, jobKeywords, matchedKeywords);
         const hasLocationMatch = locationMatch.matched > 0;
 
-        // 지역 점수 계산 추가 (34%)
+        // 지역 점수 계산 추가 (35%)
         if (hasLocationMatch) {
-            totalScore += 34;
+            totalScore += 35;
         }
-        categoryScores['지역'] = { ...locationMatch, score: hasLocationMatch ? 34 : 0, weight: 34 };
+        categoryScores['지역'] = { ...locationMatch, score: hasLocationMatch ? 35 : 0, weight: 35 };
 
         // 성별 매칭 확인 (필수)
         const genderMatch = this.checkGenderMatchRequired(userKeywordIds, jobKeywords, matchedKeywords);
         const hasGenderMatch = genderMatch.matched > 0;
         categoryScores['성별필수체크'] = { ...genderMatch, weight: 0 };
 
-        // 1. 희망직종 (31%)
+        // 1. 희망직종 (35%)
         const jobScore = this.calculateJobMatch(userKeywordIds, jobKeywords, matchedKeywords);
         totalScore += jobScore.score;
-        categoryScores['직종'] = { ...jobScore, weight: 31 };
+        categoryScores['직종'] = { ...jobScore, weight: 35 };
 
         // 2. 근무 가능 요일 (10%)
         const workDayScore = this.calculateWorkDayMatch(userKeywordIds, jobKeywords, matchedKeywords);
@@ -164,14 +164,14 @@ class SuitabilityCalculator {
         matchedJobs.forEach(k => matchedKeywords.jobs.push(k.keyword.keyword));
 
         if (jobKeywordsInPosting.length === 0) {
-            return { matched: 1, total: 1, score: 31 };
+            return { matched: 1, total: 1, score: 35 };
         }
 
         if (matchedJobs.length > 0) {
             return {
                 matched: matchedJobs.length,
                 total: jobKeywordsInPosting.length,
-                score: 31
+                score: 35
             };
         }
 
