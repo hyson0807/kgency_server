@@ -20,4 +20,7 @@ router.get('/company/:jobPostingId', applicationController.getApplicationByPosti
 // POST /api/applications/invitation - Create invitation application (requires auth)
 router.post('/invitation', authMiddleware, applicationController.createInvitationApplication);
 
+// GET /api/applications/suitability/:userId/:jobPostingId - Calculate applicant suitability
+router.get('/suitability/:userId/:jobPostingId', applicationController.calculateApplicantSuitability);
+
 module.exports = router

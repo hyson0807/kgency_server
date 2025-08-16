@@ -565,6 +565,21 @@ class SuitabilityCalculator {
             return { matched: 1, total: 1, score: 0 };
         }
 
+        // 사용자가 "지역이동 가능" 키워드를 선택했는지 확인
+        // 지역이동 가능 키워드 ID 67을 직접 확인
+        const moveableKeywordId = 67; // 지역이동 가능 키워드 ID
+        const userCanMove = userKeywordIds.includes(moveableKeywordId);
+
+        // 사용자가 지역이동 가능을 선택한 경우, 공고의 지역을 매칭된 것으로 처리
+        if (userCanMove) {
+            // 공고의 지역을 매칭된 키워드로 추가
+            locationKeywordsInPosting.forEach(k => {
+                matchedKeywords.location.push(k.keyword.keyword);
+            });
+            matchedKeywords.moveable.push('지역이동 가능');
+            return { matched: 1, total: 1, score: 0 };
+        }
+
         const userLocationKeyword = jobKeywords.find(k =>
             k.keyword.category === '지역' && userKeywordIds.includes(k.keyword.id)
         );

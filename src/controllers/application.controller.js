@@ -2,6 +2,7 @@ const applicationService = require('../services/application.service');
 const purchaseService = require('../services/purchase.service');
 const notificationService = require('../services/notification.service');
 const { supabase } = require('../config/database');
+const SuitabilityCalculator = require('../utils/suitabilityCalculator');
 
 // 중복 지원 확인
 exports.checkDuplicateApplication = async (req, res) => {
@@ -331,6 +332,98 @@ exports.createInvitationApplication = async (req, res) => {
         res.status(500).json({
             success: false,
             error: '초대형 지원서 생성에 실패했습니다.'
+        });
+    }
+}
+
+// 지원자의 적합도 계산
+exports.calculateApplicantSuitability = async (req, res) => {
+    try {
+        const { userId, jobPostingId } = req.params;
+
+        if (!userId || !jobPostingId) {
+            return res.status(400).json({
+                success: false,
+                error: 'userId와 jobPostingId가 필요합니다.'
+            });
+        }
+
+        // 1. 사용자 키워드 조회
+        const { data: userKeywords, error: userError } = await supabase
+            .from('user_keyword')
+            .select(`
+                keyword_id,
+                keyword:keyword_id (
+                    id,
+                    keyword,
+                    category
+                )
+            `)
+            .eq('user_id', userId);
+
+        if (userError) throw userError;
+
+        if (!userKeywords || userKeywords.length === 0) {
+            return res.json({
+                success: true,
+                data: {
+                    score: 0,
+                    level: 'low',
+                    details: {
+                        categoryScores: {},
+                        bonusPoints: 0,
+                        matchedKeywords: {
+                            countries: [],
+                            jobs: [],
+                            conditions: [],
+                            location: [],
+                            moveable: [],
+                            gender: [],
+                            age: [],
+                            visa: [],
+                            workDays: [],
+                            koreanLevel: []
+                        },
+                        missingRequired: [],
+                        appliedBonuses: []
+                    }
+                }
+            });
+        }
+
+        // 2. 공고 키워드 조회
+        const { data: jobPostingKeywords, error: postingError } = await supabase
+            .from('job_posting_keyword')
+            .select(`
+                keyword:keyword_id (
+                    id,
+                    keyword,
+                    category
+                )
+            `)
+            .eq('job_posting_id', jobPostingId);
+
+        if (postingError) throw postingError;
+
+        // 3. 적합도 계산
+        const calculator = new SuitabilityCalculator();
+        const userKeywordIds = userKeywords.map(uk => uk.keyword_id);
+        const jobKeywords = jobPostingKeywords?.map(jpk => ({
+            keyword: jpk.keyword
+        })) || [];
+
+        const suitability = calculator.calculate(userKeywordIds, jobKeywords);
+
+        res.json({
+            success: true,
+            data: suitability
+        });
+
+    } catch (error) {
+        console.error('적합도 계산 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '적합도 계산에 실패했습니다.'
         });
     }
 }

@@ -213,6 +213,13 @@ exports.getMatchedPostingsForUser = async (userId) => {
             const matchedKeywordDetails = [];
             const categories = ['국가', '직종', '근무조건', '지역', '지역이동', '성별', '나이대', '비자', '한국어수준', '근무요일'];
             
+            // 사용자가 지역이동 가능 키워드를 가지고 있는지 확인
+            // 동적으로 지역이동 키워드 ID 찾기
+            const moveableKeywordData = userKeywords.find(uk => uk.keyword?.category === '지역이동');
+            const moveableKeywordId = moveableKeywordData?.keyword?.id;
+            const userCanMove = moveableKeywordId && userKeywordIds.includes(moveableKeywordId);
+            
+
             categories.forEach(category => {
                 // 공고의 해당 카테고리 키워드들
                 const postingKeywordsInCategory = posting.job_posting_keywords?.filter(
@@ -223,6 +230,31 @@ exports.getMatchedPostingsForUser = async (userId) => {
                 const userKeywordsInCategory = userKeywords?.filter(
                     uk => uk.keyword?.category === category
                 ) || [];
+
+                // 지역 카테고리이고 사용자가 지역이동 가능을 선택한 경우 특별 처리
+                if (category === '지역' && userCanMove && postingKeywordsInCategory.length > 0) {
+                    // 공고의 지역을 매칭된 것으로 처리
+                    postingKeywordsInCategory.forEach(jpk => {
+                        if (!matchedKeywordDetails.some(mkd => mkd.id === jpk.keyword.id)) {
+                            matchedKeywordDetails.push({
+                                id: jpk.keyword.id,
+                                keyword: jpk.keyword.keyword,
+                                category: jpk.keyword.category
+                            });
+                        }
+                    });
+                    
+                    // 지역이동 가능 키워드도 추가
+                    const moveableKeyword = userKeywords.find(uk => uk.keyword_id === moveableKeywordId);
+                    if (moveableKeyword) {
+                        matchedKeywordDetails.push({
+                            id: moveableKeyword.keyword.id,
+                            keyword: moveableKeyword.keyword.keyword,
+                            category: '지역이동'
+                        });
+                    }
+                    return; // 이 카테고리 처리 완료
+                }
 
                 // 공고가 "상관없음" 선택한 경우
                 const postingHasNoPreference = postingKeywordsInCategory.some(
