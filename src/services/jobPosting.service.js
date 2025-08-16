@@ -202,9 +202,9 @@ exports.getMatchedPostingsForUser = async (userId) => {
         const SuitabilityCalculator = require('../utils/suitabilityCalculator');
         const calculator = new SuitabilityCalculator();
 
-        const matchedPostings = jobPostings.map(posting => {
+        const matchedPostings = await Promise.all(jobPostings.map(async posting => {
             // 적합도 계산 (공고 키워드만 사용)
-            const suitability = calculator.calculate(
+            const suitability = await calculator.calculate(
                 userKeywordIds,
                 posting.job_posting_keywords || []
             );
@@ -406,7 +406,7 @@ exports.getMatchedPostingsForUser = async (userId) => {
                 matchedKeywords: translatedMatchedKeywords,
                 suitability
             };
-        });
+        }));
 
         // 4. 적합도 점수 높은 순으로 정렬
         matchedPostings.sort((a, b) => b.suitability.score - a.suitability.score);

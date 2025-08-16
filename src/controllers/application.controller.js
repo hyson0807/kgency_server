@@ -412,7 +412,7 @@ exports.calculateApplicantSuitability = async (req, res) => {
             keyword: jpk.keyword
         })) || [];
 
-        const suitability = calculator.calculate(userKeywordIds, jobKeywords);
+        const suitability = await calculator.calculate(userKeywordIds, jobKeywords);
 
         res.json({
             success: true,

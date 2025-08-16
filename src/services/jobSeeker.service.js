@@ -62,7 +62,7 @@ class JobSeekerService {
             if (seekersError) throw seekersError;
 
             // 3. 각 구직자에 대해 매칭 점수 계산
-            const matchedJobSeekers = jobSeekers.map(jobSeeker => {
+            const matchedJobSeekers = await Promise.all(jobSeekers.map(async jobSeeker => {
                 const userKeywordIds = jobSeeker.user_keywords?.map(
                     uk => uk.keyword.id
                 ) || [];
@@ -169,7 +169,7 @@ class JobSeekerService {
                 // 적합도 계산 (기존 방식 유지)
                 let suitability = undefined;
                 if (companyKeywordsForCalculator.length > 0) {
-                    suitability = this.calculator.calculate(userKeywordIds, companyKeywordsForCalculator);
+                    suitability = await this.calculator.calculate(userKeywordIds, companyKeywordsForCalculator);
                 }
 
                 // user_keywords를 제거하고 깔끔한 형태로 반환
@@ -182,7 +182,7 @@ class JobSeekerService {
                     matchedKeywordsWithCategory,
                     suitability
                 };
-            });
+            }));
 
             // 4. 적합도 점수 높은 순으로 정렬
             matchedJobSeekers.sort((a, b) => {

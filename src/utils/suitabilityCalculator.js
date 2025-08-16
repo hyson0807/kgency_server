@@ -1,5 +1,7 @@
 // utils/suitabilityCalculator.js - 서버용 적합도 계산기
 
+const keywordHelper = require('./keywordHelper');
+
 const defaultSuitabilityRules = {
     scoreLevels: {
         perfect: 90,
@@ -12,6 +14,18 @@ const defaultSuitabilityRules = {
 class SuitabilityCalculator {
     constructor(rules) {
         this.rules = rules || defaultSuitabilityRules;
+        this.keywordIds = null; // 캐시된 키워드 ID들
+    }
+
+    /**
+     * 필요한 키워드 ID들을 조회하여 캐시
+     */
+    async loadKeywordIds() {
+        if (!this.keywordIds) {
+            this.keywordIds = await keywordHelper.getSuitabilityKeywordIds();
+            console.log('키워드 ID 로드 완료:', this.keywordIds);
+        }
+        return this.keywordIds;
     }
 
     /**
@@ -43,7 +57,9 @@ class SuitabilityCalculator {
     /**
      * 적합도 계산 메인 함수
      */
-    calculate(userKeywordIds, jobKeywords) {
+    async calculate(userKeywordIds, jobKeywords) {
+        // 키워드 ID들을 미리 로드
+        await this.loadKeywordIds();
         let totalScore = 0;
         const categoryScores = {};
         const matchedKeywords = this.initializeMatchedKeywords();
@@ -52,26 +68,26 @@ class SuitabilityCalculator {
         const locationMatch = this.checkLocationMatch(userKeywordIds, jobKeywords, matchedKeywords);
         const hasLocationMatch = locationMatch.matched > 0;
 
-        // 지역 점수 계산 추가 (38%)
+        // 지역 점수 계산 추가 (34%)
         if (hasLocationMatch) {
-            totalScore += 38;
+            totalScore += 34;
         }
-        categoryScores['지역'] = { ...locationMatch, score: hasLocationMatch ? 38 : 0, weight: 38 };
+        categoryScores['지역'] = { ...locationMatch, score: hasLocationMatch ? 34 : 0, weight: 34 };
 
         // 성별 매칭 확인 (필수)
         const genderMatch = this.checkGenderMatchRequired(userKeywordIds, jobKeywords, matchedKeywords);
         const hasGenderMatch = genderMatch.matched > 0;
         categoryScores['성별필수체크'] = { ...genderMatch, weight: 0 };
 
-        // 1. 희망직종 (33%)
+        // 1. 희망직종 (31%)
         const jobScore = this.calculateJobMatch(userKeywordIds, jobKeywords, matchedKeywords);
         totalScore += jobScore.score;
-        categoryScores['직종'] = { ...jobScore, weight: 33 };
+        categoryScores['직종'] = { ...jobScore, weight: 31 };
 
-        // 2. 근무 가능 요일 (11%)
+        // 2. 근무 가능 요일 (10%)
         const workDayScore = this.calculateWorkDayMatch(userKeywordIds, jobKeywords, matchedKeywords);
         totalScore += workDayScore.score;
-        categoryScores['근무요일'] = { ...workDayScore, weight: 11 };
+        categoryScores['근무요일'] = { ...workDayScore, weight: 10 };
 
         // 3. 한국어 실력 (5% 보너스)
         const koreanScore = this.calculateKoreanLevelMatch(userKeywordIds, jobKeywords, matchedKeywords);
@@ -148,14 +164,14 @@ class SuitabilityCalculator {
         matchedJobs.forEach(k => matchedKeywords.jobs.push(k.keyword.keyword));
 
         if (jobKeywordsInPosting.length === 0) {
-            return { matched: 1, total: 1, score: 33 };
+            return { matched: 1, total: 1, score: 31 };
         }
 
         if (matchedJobs.length > 0) {
             return {
                 matched: matchedJobs.length,
                 total: jobKeywordsInPosting.length,
-                score: 33
+                score: 31
             };
         }
 
@@ -192,7 +208,7 @@ class SuitabilityCalculator {
         return {
             matched: matchedWorkDays.length,
             total: workDayKeywordsInPosting.length,
-            score: matchRate * 11
+            score: matchRate * 10
         };
     }
 
@@ -461,7 +477,12 @@ class SuitabilityCalculator {
     }
 
     calculateVisaSupportMatch(userKeywordIds, jobKeywords, matchedKeywords) {
-        const visaSupportId = 49;
+        const visaSupportId = this.keywordIds?.visaSupport;
+        if (!visaSupportId) {
+            console.warn('비자지원 키워드 ID를 찾을 수 없습니다');
+            return { matched: 0, total: 1, score: 0 };
+        }
+
         const hasVisaSupport = jobKeywords.some(k =>
             k.keyword.id === visaSupportId && userKeywordIds.includes(visaSupportId)
         );
@@ -475,7 +496,12 @@ class SuitabilityCalculator {
     }
 
     calculateMealProvidedMatch(userKeywordIds, jobKeywords, matchedKeywords) {
-        const mealProvidedId = 46;
+        const mealProvidedId = this.keywordIds?.mealProvided;
+        if (!mealProvidedId) {
+            console.warn('식사제공 키워드 ID를 찾을 수 없습니다');
+            return { matched: 0, total: 1, score: 0 };
+        }
+
         const hasMealProvided = jobKeywords.some(k =>
             k.keyword.id === mealProvidedId && userKeywordIds.includes(mealProvidedId)
         );
@@ -534,7 +560,19 @@ class SuitabilityCalculator {
     }
 
     calculateOtherConditionsMatch(userKeywordIds, jobKeywords, matchedKeywords) {
-        const otherConditionIds = [44, 45, 47, 48];
+        // 동적으로 기타 근무조건 ID들을 구성 (비자지원, 식사제공 제외)
+        const otherConditionIds = [
+            this.keywordIds?.highSalary,
+            this.keywordIds?.accommodation,
+            this.keywordIds?.weekendWork,
+            this.keywordIds?.shuttleBus
+        ].filter(Boolean); // null/undefined 제거
+
+        if (otherConditionIds.length === 0) {
+            console.warn('기타 근무조건 키워드 ID들을 찾을 수 없습니다');
+            return { matched: 0, total: 0, score: 2 };
+        }
+
         const otherConditions = jobKeywords.filter(k =>
             k.keyword.category === '근무조건' &&
             otherConditionIds.includes(k.keyword.id)
@@ -565,10 +603,9 @@ class SuitabilityCalculator {
             return { matched: 1, total: 1, score: 0 };
         }
 
-        // 사용자가 "지역이동 가능" 키워드를 선택했는지 확인
-        // 지역이동 가능 키워드 ID 67을 직접 확인
-        const moveableKeywordId = 67; // 지역이동 가능 키워드 ID
-        const userCanMove = userKeywordIds.includes(moveableKeywordId);
+        // 사용자가 "지역이동 가능" 키워드를 선택했는지 확인 (동적 조회)
+        const moveableKeywordId = this.keywordIds?.moveable;
+        const userCanMove = moveableKeywordId && userKeywordIds.includes(moveableKeywordId);
 
         // 사용자가 지역이동 가능을 선택한 경우, 공고의 지역을 매칭된 것으로 처리
         if (userCanMove) {
