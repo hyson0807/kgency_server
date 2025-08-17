@@ -131,9 +131,16 @@ class SuitabilityCalculator {
 
         // 필수 항목 미매칭 시 패널티
         const missingRequired = [];
+        const hasJobMatch = jobScore.matched > 0;
+        
         if (!hasLocationMatch) {
             totalScore = totalScore * 0.3;
             missingRequired.push('지역');
+        }
+
+        if (!hasJobMatch) {
+            totalScore = totalScore * 0.3;
+            missingRequired.push('직종');
         }
 
         if (!hasGenderMatch) {
@@ -163,8 +170,9 @@ class SuitabilityCalculator {
 
         matchedJobs.forEach(k => matchedKeywords.jobs.push(k.keyword.keyword));
 
+        // 공고에 직종 키워드가 없는 경우 0점 처리 (매칭 불가)
         if (jobKeywordsInPosting.length === 0) {
-            return { matched: 1, total: 1, score: 35 };
+            return { matched: 0, total: 0, score: 0 };
         }
 
         if (matchedJobs.length > 0) {
@@ -599,8 +607,9 @@ class SuitabilityCalculator {
     checkLocationMatch(userKeywordIds, jobKeywords, matchedKeywords) {
         const locationKeywordsInPosting = jobKeywords.filter(k => k.keyword.category === '지역');
 
+        // 공고에 지역 키워드가 없는 경우 매칭 불가로 처리
         if (locationKeywordsInPosting.length === 0) {
-            return { matched: 1, total: 1, score: 0 };
+            return { matched: 0, total: 0, score: 0 };
         }
 
         // 사용자가 "지역이동 가능" 키워드를 선택했는지 확인 (동적 조회)
