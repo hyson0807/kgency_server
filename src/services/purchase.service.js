@@ -148,9 +148,12 @@ class PurchaseService {
         // 여기서 acknowledgement 처리 가능
       }
 
+      // 고유한 transaction ID 생성 (재구매 지원을 위해)
+      const transactionId = purchase.orderId || `ANDROID_${userId}_${purchase.purchaseTimeMillis}`;
+      
       return {
         isValid: true,
-        transactionId: purchase.orderId || `ANDROID_${Date.now()}`,
+        transactionId: transactionId,
         productId: productId,
         purchaseDate: new Date(parseInt(purchase.purchaseTimeMillis)),
         verificationData: purchase
@@ -193,12 +196,18 @@ class PurchaseService {
       // 2. 중복 구매 확인
       const { data: existingPurchase } = await supabase
         .from('purchases')
-        .select('id')
+        .select('id, tokens_given')
         .eq('transaction_id', verificationResult.transactionId)
         .single();
 
       if (existingPurchase) {
-        throw new Error('Purchase already processed');
+        console.log('Purchase already processed, returning existing data');
+        return {
+          success: true,
+          purchase: existingPurchase,
+          tokensAdded: existingPurchase.tokens_given,
+          alreadyProcessed: true
+        };
       }
 
       // 3. 트랜잭션 시작
