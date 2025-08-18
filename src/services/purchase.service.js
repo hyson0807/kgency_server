@@ -13,10 +13,18 @@ class PurchaseService {
 
     // Google Play 검증 설정
     this.androidPublisher = google.androidpublisher('v3');
+    
+    // Private key를 완전한 PEM 형식으로 변환
+    const formatPrivateKey = (key) => {
+      if (!key) return null;
+      if (key.includes('-----BEGIN PRIVATE KEY-----')) return key;
+      return `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----\n`;
+    };
+    
     this.googleAuth = new google.auth.JWT(
       process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
       null,
-      process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY),
       ['https://www.googleapis.com/auth/androidpublisher']
     );
   }
@@ -85,12 +93,39 @@ class PurchaseService {
   async verifyGoogleReceipt(purchaseToken, userId, productId = 'token_5_pack_android') {
     try {
       console.log('=== Google Receipt Verification ===');
-      console.log('Purchase Token:', purchaseToken);
+      console.log('Purchase Token:', purchaseToken ? `${purchaseToken.substring(0, 20)}...` : 'Missing');
       console.log('Product ID:', productId);
       console.log('Package Name:', process.env.GOOGLE_PACKAGE_NAME);
       console.log('Service Account Email:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ? 'Present' : 'Missing');
       console.log('Private Key:', process.env.GOOGLE_PRIVATE_KEY ? 'Present' : 'Missing');
       
+      // 환경변수 검증
+      if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+        console.error('Google Play 서비스 계정 정보가 설정되지 않았습니다.');
+        console.error('Google Play Console에서 서비스 계정을 생성하고 .env 파일에 설정해주세요.');
+        
+        // 개발 환경에서는 임시로 성공 처리 (테스트용)
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('개발 환경: Google Play 검증을 건너뜁니다.');
+          return {
+            isValid: true,
+            transactionId: `DEV_${Date.now()}`,
+            productId: productId,
+            purchaseDate: new Date(),
+            verificationData: { 
+              developmentMode: true,
+              message: 'Google Play verification skipped in development'
+            }
+          };
+        }
+        
+        return { 
+          isValid: false, 
+          error: 'Google Play service account not configured' 
+        };
+      }
+      
+      // Google Play API 호출
       const response = await this.androidPublisher.purchases.products.get({
         packageName: process.env.GOOGLE_PACKAGE_NAME,
         productId: productId,
@@ -101,13 +136,21 @@ class PurchaseService {
       const purchase = response.data;
       console.log('Google Play API Response:', JSON.stringify(purchase, null, 2));
       
-      if (purchase.purchaseState !== 0) { // 0 = purchased
+      // 구매 상태 확인 (0 = purchased, 1 = canceled)
+      if (purchase.purchaseState !== 0) {
+        console.error('Purchase state is not valid:', purchase.purchaseState);
         throw new Error('Purchase not in purchased state');
+      }
+      
+      // acknowledgementState 확인 (0 = unacknowledged, 1 = acknowledged)
+      if (purchase.acknowledgementState === 0) {
+        console.log('Purchase needs acknowledgement');
+        // 여기서 acknowledgement 처리 가능
       }
 
       return {
         isValid: true,
-        transactionId: purchase.orderId,
+        transactionId: purchase.orderId || `ANDROID_${Date.now()}`,
         productId: productId,
         purchaseDate: new Date(parseInt(purchase.purchaseTimeMillis)),
         verificationData: purchase
@@ -120,6 +163,12 @@ class PurchaseService {
         statusText: error.statusText,
         response: error.response?.data
       });
+      
+      // API 키 관련 에러 처리
+      if (error.message?.includes('invalid_grant') || error.status === 401) {
+        console.error('Google Play API 인증 실패. 서비스 계정 키를 확인해주세요.');
+      }
+      
       return { isValid: false, error: error.message };
     }
   }
