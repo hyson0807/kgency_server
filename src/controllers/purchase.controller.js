@@ -51,22 +51,45 @@ class PurchaseController {
 
     } catch (error) {
       console.error('Purchase verification failed:', error);
+      console.error('Error stack:', error.stack);
       
       let statusCode = 500;
       let errorMessage = 'Internal server error';
+      let detailMessage = error.message;
 
       if (error.message.includes('already processed')) {
         statusCode = 409;
         errorMessage = 'Purchase already processed';
+        detailMessage = '이미 처리된 구매입니다.';
       } else if (error.message.includes('verification failed')) {
         statusCode = 400;
         errorMessage = 'Invalid receipt';
+        detailMessage = '구매 영수증 검증에 실패했습니다.';
+      } else if (error.message.includes('Google Auth failed') || error.message.includes('authentication credential')) {
+        statusCode = 503;
+        errorMessage = 'Service temporarily unavailable';
+        detailMessage = 'Google Play API 인증에 실패했습니다. 잠시 후 다시 시도해주세요.';
+      } else if (error.message.includes('Google Play service account not configured')) {
+        statusCode = 503;
+        errorMessage = 'Service configuration error';
+        detailMessage = '서버 설정 오류입니다. 관리자에게 문의해주세요.';
       }
 
-      res.status(statusCode).json({
+      // 개발 환경에서는 더 자세한 에러 정보 제공
+      const responseData = {
         success: false,
-        error: errorMessage
-      });
+        error: errorMessage,
+        message: detailMessage
+      };
+
+      if (process.env.NODE_ENV === 'development') {
+        responseData.debugInfo = {
+          originalError: error.message,
+          stack: error.stack
+        };
+      }
+
+      res.status(statusCode).json(responseData);
     }
   }
 

@@ -14,19 +14,61 @@ class PurchaseService {
     // Google Play 검증 설정
     this.androidPublisher = google.androidpublisher('v3');
     
-    // Private key를 완전한 PEM 형식으로 변환
-    const formatPrivateKey = (key) => {
-      if (!key) return null;
-      if (key.includes('-----BEGIN PRIVATE KEY-----')) return key;
-      return `-----BEGIN PRIVATE KEY-----\n${key}\n-----END PRIVATE KEY-----\n`;
-    };
-    
-    this.googleAuth = new google.auth.JWT(
-      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      null,
-      formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY),
-      ['https://www.googleapis.com/auth/androidpublisher']
-    );
+    try {
+      // 환경변수를 사용한 안전한 인증 - GoogleAuth 방식 사용
+      const formatPrivateKey = (key) => {
+        if (!key) {
+          console.error('GOOGLE_PRIVATE_KEY 환경변수가 설정되지 않았습니다.');
+          return null;
+        }
+        
+        // 따옴표 제거
+        let formattedKey = key.replace(/^["']|["']$/g, '');
+        
+        // 이스케이프된 개행 문자를 실제 개행으로 변환
+        formattedKey = formattedKey.replace(/\\n/g, '\n');
+        
+        return formattedKey;
+      };
+      
+      if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
+        throw new Error('Google Service Account 환경변수가 설정되지 않았습니다.');
+      }
+      
+      const privateKey = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
+      if (!privateKey) {
+        throw new Error('GOOGLE_PRIVATE_KEY 포맷이 올바르지 않습니다.');
+      }
+      
+      // 서비스 계정 credentials 객체 생성
+      const credentials = {
+        type: 'service_account',
+        project_id: 'kgency-expo-project',
+        private_key_id: '70bda2aee0375bbf4dc19429b867678e9e94f1c1',
+        private_key: privateKey,
+        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+        client_id: '115005557710037850665',
+        auth_uri: 'https://accounts.google.com/o/oauth2/auth',
+        token_uri: 'https://oauth2.googleapis.com/token',
+        auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
+        client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL)}`,
+        universe_domain: 'googleapis.com'
+      };
+      
+      // GoogleAuth 객체 생성 (credentials 직접 사용)
+      this.googleAuth = new google.auth.GoogleAuth({
+        credentials: credentials,
+        scopes: ['https://www.googleapis.com/auth/androidpublisher']
+      });
+      
+      console.log('✅ Google Auth 환경변수 기반 인증 초기화 성공');
+      console.log('Service Account Email:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+      console.log('Private Key Length:', privateKey.length);
+      
+    } catch (error) {
+      console.error('❌ Google Auth 초기화 실패:', error.message);
+      this.googleAuth = null;
+    }
   }
 
   async verifyAppleReceipt(receiptData, userId) {
@@ -98,26 +140,12 @@ class PurchaseService {
       console.log('Package Name:', process.env.GOOGLE_PACKAGE_NAME);
       console.log('Service Account Email:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ? 'Present' : 'Missing');
       console.log('Private Key:', process.env.GOOGLE_PRIVATE_KEY ? 'Present' : 'Missing');
+      console.log('Google Auth Object:', this.googleAuth ? 'Initialized' : 'Not Initialized');
       
       // 환경변수 검증
       if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
         console.error('Google Play 서비스 계정 정보가 설정되지 않았습니다.');
         console.error('Google Play Console에서 서비스 계정을 생성하고 .env 파일에 설정해주세요.');
-        
-        // 개발 환경에서는 임시로 성공 처리 (테스트용)
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('개발 환경: Google Play 검증을 건너뜁니다.');
-          return {
-            isValid: true,
-            transactionId: `DEV_${Date.now()}`,
-            productId: productId,
-            purchaseDate: new Date(),
-            verificationData: { 
-              developmentMode: true,
-              message: 'Google Play verification skipped in development'
-            }
-          };
-        }
         
         return { 
           isValid: false, 
@@ -125,15 +153,40 @@ class PurchaseService {
         };
       }
       
+      // Google Auth 객체 검증
+      if (!this.googleAuth) {
+        console.error('Google Auth가 초기화되지 않았습니다.');
+        return { 
+          isValid: false, 
+          error: 'Google Auth not initialized' 
+        };
+      }
+      
+      // Google Auth 클라이언트 획득
+      console.log('Google Auth 클라이언트 획득 중...');
+      let authClient;
+      try {
+        authClient = await this.googleAuth.getClient();
+        console.log('✅ Google Auth 클라이언트 획득 성공');
+      } catch (authError) {
+        console.error('❌ Google Auth 클라이언트 획득 실패:', authError);
+        return { 
+          isValid: false, 
+          error: `Google Auth failed: ${authError.message}` 
+        };
+      }
+      
       // Google Play API 호출
+      console.log('Google Play API 호출 중...');
       const response = await this.androidPublisher.purchases.products.get({
         packageName: process.env.GOOGLE_PACKAGE_NAME,
         productId: productId,
         token: purchaseToken,
-        auth: this.googleAuth
+        auth: authClient
       });
 
       const purchase = response.data;
+      console.log('Google Play API Response Status:', response.status);
       console.log('Google Play API Response:', JSON.stringify(purchase, null, 2));
       
       // 구매 상태 확인 (0 = purchased, 1 = canceled)
