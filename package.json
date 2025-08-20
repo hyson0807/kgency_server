@@ -26,6 +26,7 @@
     "node-apple-receipt-verify": "^1.15.0",
     "nodemon": "^3.1.10",
     "openai": "^5.8.2",
-    "solapi": "^5.4.0"
+    "solapi": "^5.4.0",
+    "uuid": "^11.1.0"
   }
 }

@@ -26,4 +26,13 @@ router.put('/push-token', authMiddleware, profileController.updatePushToken);
 // DELETE /api/profiles/push-token - Remove push token
 router.delete('/push-token', authMiddleware, profileController.removePushToken);
 
+// POST /api/profiles/image - Upload profile image
+router.post('/image', authMiddleware, profileController.uploadProfileImage);
+
+// PUT /api/profiles/image - Update profile image
+router.put('/image', authMiddleware, profileController.updateProfileImage);
+
+// DELETE /api/profiles/image - Delete profile image
+router.delete('/image', authMiddleware, profileController.deleteProfileImage);
+
 module.exports = router;

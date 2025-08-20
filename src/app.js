@@ -13,8 +13,8 @@ app.set('trust proxy', 1);
 
 // 기본 미들웨어
 app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' })); // 이미지 업로드를 위해 크기 제한 증가
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting (전체 API)
 app.use('/api', apiLimiter);

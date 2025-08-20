@@ -284,6 +284,198 @@ exports.removePushToken = async (req, res) => {
     }
 };
 
+// 프로필 이미지 업로드
+const uploadProfileImage = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { base64Image, mimeType } = req.body;
+
+        if (!base64Image) {
+            return res.status(400).json({
+                success: false,
+                error: '이미지 데이터가 필요합니다.'
+            });
+        }
+
+        // Base64에서 데이터 추출
+        const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        // 파일 확장자 결정
+        const extension = mimeType ? mimeType.split('/')[1] : 'jpeg';
+        const fileName = `${userId}_${Date.now()}.${extension}`;
+        const filePath = `profile_images/${fileName}`;
+
+        // Supabase Storage에 업로드
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('profile_image')
+            .upload(filePath, buffer, {
+                contentType: mimeType || 'image/jpeg',
+                upsert: false
+            });
+
+        if (uploadError) throw uploadError;
+
+        // Public URL 생성
+        const { data: { publicUrl } } = supabase.storage
+            .from('profile_image')
+            .getPublicUrl(filePath);
+
+        // profiles 테이블 업데이트
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ profile_image_url: publicUrl })
+            .eq('id', userId);
+
+        if (updateError) throw updateError;
+
+        res.json({
+            success: true,
+            data: {
+                url: publicUrl,
+                path: filePath
+            },
+            message: '프로필 이미지가 업로드되었습니다.'
+        });
+
+    } catch (error) {
+        console.error('프로필 이미지 업로드 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '프로필 이미지 업로드에 실패했습니다.'
+        });
+    }
+};
+
+// 프로필 이미지 수정
+const updateProfileImage = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { base64Image, mimeType } = req.body;
+
+        if (!base64Image) {
+            return res.status(400).json({
+                success: false,
+                error: '이미지 데이터가 필요합니다.'
+            });
+        }
+
+        // 기존 이미지 URL 가져오기
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('profile_image_url')
+            .eq('id', userId)
+            .single();
+
+        if (profileError) throw profileError;
+
+        // 기존 이미지가 있으면 삭제
+        if (profile.profile_image_url) {
+            const oldPath = profile.profile_image_url.split('/').slice(-2).join('/');
+            await supabase.storage
+                .from('profile_image')
+                .remove([oldPath]);
+        }
+
+        // 새 이미지 업로드
+        const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+
+        const extension = mimeType ? mimeType.split('/')[1] : 'jpeg';
+        const fileName = `${userId}_${Date.now()}.${extension}`;
+        const filePath = `profile_images/${fileName}`;
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('profile_image')
+            .upload(filePath, buffer, {
+                contentType: mimeType || 'image/jpeg',
+                upsert: false
+            });
+
+        if (uploadError) throw uploadError;
+
+        // Public URL 생성
+        const { data: { publicUrl } } = supabase.storage
+            .from('profile_image')
+            .getPublicUrl(filePath);
+
+        // profiles 테이블 업데이트
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ profile_image_url: publicUrl })
+            .eq('id', userId);
+
+        if (updateError) throw updateError;
+
+        res.json({
+            success: true,
+            data: {
+                url: publicUrl,
+                path: filePath
+            },
+            message: '프로필 이미지가 수정되었습니다.'
+        });
+
+    } catch (error) {
+        console.error('프로필 이미지 수정 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '프로필 이미지 수정에 실패했습니다.'
+        });
+    }
+};
+
+// 프로필 이미지 삭제
+const deleteProfileImage = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        // 현재 프로필 이미지 URL 가져오기
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('profile_image_url')
+            .eq('id', userId)
+            .single();
+
+        if (profileError) throw profileError;
+
+        if (!profile.profile_image_url) {
+            return res.status(404).json({
+                success: false,
+                error: '삭제할 프로필 이미지가 없습니다.'
+            });
+        }
+
+        // Storage에서 이미지 삭제
+        const imagePath = profile.profile_image_url.split('/').slice(-2).join('/');
+        const { error: deleteError } = await supabase.storage
+            .from('profile_image')
+            .remove([imagePath]);
+
+        if (deleteError) throw deleteError;
+
+        // profiles 테이블에서 URL 제거
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ profile_image_url: null })
+            .eq('id', userId);
+
+        if (updateError) throw updateError;
+
+        res.json({
+            success: true,
+            message: '프로필 이미지가 삭제되었습니다.'
+        });
+
+    } catch (error) {
+        console.error('프로필 이미지 삭제 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '프로필 이미지 삭제에 실패했습니다.'
+        });
+    }
+};
+
 module.exports = {
     getProfile,
     updateProfile,
@@ -291,5 +483,8 @@ module.exports = {
     getJobSeekers,
     getUserProfile,
     updatePushToken: exports.updatePushToken,
-    removePushToken: exports.removePushToken
+    removePushToken: exports.removePushToken,
+    uploadProfileImage,
+    updateProfileImage,
+    deleteProfileImage
 };

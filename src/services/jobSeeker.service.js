@@ -32,7 +32,7 @@ class JobSeekerService {
                 keyword: ck.keyword
             })) || [];
 
-            // 2. 활성화된 구직자 목록 가져오기 (user_info와 keywords 포함)
+            // 2. 활성화된 구직자 목록 가져오기 (user_info와 keywords, profile_image_url 포함)
             const { data: jobSeekers, error: seekersError } = await supabase
                 .from('profiles')
                 .select(`
