@@ -1,4 +1,5 @@
 const {supabase} = require('../config/database')
+const sharp = require('sharp')
 
 // 프로필 조회
 const getProfile = async (req, res) => {
@@ -301,16 +302,24 @@ const uploadProfileImage = async (req, res) => {
         const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
 
-        // 파일 확장자 결정
-        const extension = mimeType ? mimeType.split('/')[1] : 'jpeg';
-        const fileName = `${userId}_${Date.now()}.${extension}`;
+        // Sharp를 사용하여 이미지 리사이징 및 최적화
+        const resizedBuffer = await sharp(buffer)
+            .resize(1024, 1024, {
+                fit: 'inside',
+                withoutEnlargement: true
+            })
+            .jpeg({ quality: 80 })  // JPEG로 변환하고 품질 80%로 설정
+            .toBuffer();
+
+        // 파일 확장자 결정 (리사이징 후 항상 JPEG로 저장)
+        const fileName = `${userId}_${Date.now()}.jpeg`;
         const filePath = `profile_images/${fileName}`;
 
         // Supabase Storage에 업로드
         const { data: uploadData, error: uploadError } = await supabase.storage
             .from('profile_image')
-            .upload(filePath, buffer, {
-                contentType: mimeType || 'image/jpeg',
+            .upload(filePath, resizedBuffer, {
+                contentType: 'image/jpeg',
                 upsert: false
             });
 
@@ -381,14 +390,23 @@ const updateProfileImage = async (req, res) => {
         const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
 
-        const extension = mimeType ? mimeType.split('/')[1] : 'jpeg';
-        const fileName = `${userId}_${Date.now()}.${extension}`;
+        // Sharp를 사용하여 이미지 리사이징 및 최적화
+        const resizedBuffer = await sharp(buffer)
+            .resize(1024, 1024, {
+                fit: 'inside',
+                withoutEnlargement: true
+            })
+            .jpeg({ quality: 80 })  // JPEG로 변환하고 품질 80%로 설정
+            .toBuffer();
+
+        // 파일 확장자 결정 (리사이징 후 항상 JPEG로 저장)
+        const fileName = `${userId}_${Date.now()}.jpeg`;
         const filePath = `profile_images/${fileName}`;
 
         const { data: uploadData, error: uploadError } = await supabase.storage
             .from('profile_image')
-            .upload(filePath, buffer, {
-                contentType: mimeType || 'image/jpeg',
+            .upload(filePath, resizedBuffer, {
+                contentType: 'image/jpeg',
                 upsert: false
             });
 
