@@ -1,9 +1,16 @@
 const { supabase } = require('../config/database');
 const appleReceiptVerify = require('node-apple-receipt-verify');
 const { google } = require('googleapis');
+const { SolapiMessageService } = require('solapi');
 
 class PurchaseService {
   constructor() {
+    // SMS 서비스 초기화
+    this.messageService = new SolapiMessageService(
+      process.env.SOLAPI_API_KEY,
+      process.env.SOLAPI_API_SECRET
+    );
+
     // Apple 영수증 검증 설정
     appleReceiptVerify.config({
       secret: process.env.APPLE_SHARED_SECRET,
@@ -329,8 +336,7 @@ class PurchaseService {
           amount: amount,
           type: 'purchase',
           reference_id: purchaseId,
-          description: `토큰 ${amount}개 구매`,
-          metadata: { product_id: productId || 'token_5_pack', purchase_id: purchaseId }
+          description: `토큰 ${amount}개 구매 (${productId || 'token_5_pack'})`
         });
 
       if (transactionError) throw transactionError;
@@ -377,8 +383,7 @@ class PurchaseService {
           amount: -amount, // 음수로 기록
           type: 'spend',
           reference_id: referenceId,
-          description: description,
-          metadata: { remaining_balance: newBalance }
+          description: description
         })
         .select()
         .single();
@@ -432,6 +437,180 @@ class PurchaseService {
 
     if (error) throw error;
     return data;
+  }
+
+  async processYatraPurchase(userId, email, platform, receiptData, purchaseToken) {
+    try {
+      console.log('=== Processing Yatra Package Purchase ===');
+      console.log('User ID:', userId);
+      console.log('Email:', email);
+      console.log('Platform:', platform);
+
+      // 1. 영수증 검증
+      let verificationResult;
+      if (platform === 'ios') {
+        verificationResult = await this.verifyAppleReceiptForYatra(receiptData, userId);
+      } else if (platform === 'android') {
+        verificationResult = await this.verifyGoogleReceipt(purchaseToken, userId, 'yatra_package_1');
+      } else {
+        throw new Error('Invalid platform');
+      }
+
+      if (!verificationResult.isValid) {
+        throw new Error(`Receipt verification failed: ${verificationResult.error}`);
+      }
+
+      // 2. 중복 구매 확인
+      const { data: existingPurchase } = await supabase
+        .from('purchases')
+        .select('id, tokens_given')
+        .eq('transaction_id', verificationResult.transactionId)
+        .single();
+
+      if (existingPurchase) {
+        console.log('Yatra purchase already processed, returning existing data');
+        return {
+          success: true,
+          purchase: existingPurchase,
+          tokensAdded: existingPurchase.tokens_given,
+          alreadyProcessed: true
+        };
+      }
+
+      // 3. 구매 기록 저장 (이메일은 SMS로 별도 처리)
+      const { data: purchase, error: purchaseError } = await supabase
+        .from('purchases')
+        .insert({
+          user_id: userId,
+          product_id: 'yatra_package_1',
+          transaction_id: verificationResult.transactionId,
+          platform: platform,
+          price_cents: 5500000, // ₩55,000
+          currency: 'KRW',
+          tokens_given: 20,
+          status: 'completed',
+          receipt_data: receiptData || purchaseToken,
+          verification_data: verificationResult.verificationData,
+          verified_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (purchaseError) throw purchaseError;
+
+      // 4. 토큰 20개 지급
+      await this.addTokensToUser(userId, 20, purchase.id, 'yatra_package_1');
+
+      // 5. 관리자에게 SMS 알림 (실패해도 구매는 성공으로 처리)
+      try {
+        await this.sendYatraPurchaseNotification(userId, email);
+      } catch (smsError) {
+        console.error('SMS notification failed:', smsError);
+        // SMS 실패는 구매 성공에 영향을 주지 않음
+      }
+
+      return {
+        success: true,
+        purchase: purchase,
+        tokensAdded: 20
+      };
+
+    } catch (error) {
+      console.error('Yatra purchase processing failed:', error);
+      throw error;
+    }
+  }
+
+  async verifyAppleReceiptForYatra(receiptData, userId) {
+    try {
+      console.log('Verifying Apple receipt for Yatra package, user:', userId);
+      
+      const products = await appleReceiptVerify.validate({
+        receipt: receiptData,
+        environment: ['sandbox']
+      });
+
+      console.log('Apple receipt verification result:', JSON.stringify(products, null, 2));
+      
+      let yatraPurchase = null;
+      
+      if (Array.isArray(products)) {
+        yatraPurchase = products.find(item => item.productId === 'yatra_package_1');
+      } else {
+        let receiptInfo = [];
+        if (products.latest_receipt_info && products.latest_receipt_info.length > 0) {
+          receiptInfo = products.latest_receipt_info;
+        } else if (products.receipt && products.receipt.in_app && products.receipt.in_app.length > 0) {
+          receiptInfo = products.receipt.in_app;
+        }
+        
+        yatraPurchase = receiptInfo.find(item => item.product_id === 'yatra_package_1');
+      }
+
+      if (!yatraPurchase) {
+        throw new Error('Yatra package purchase not found in receipt');
+      }
+
+      const transactionId = yatraPurchase.transactionId || yatraPurchase.transaction_id;
+      const productId = yatraPurchase.productId || yatraPurchase.product_id;
+      const purchaseDate = yatraPurchase.purchaseDate || parseInt(yatraPurchase.purchase_date_ms);
+
+      return {
+        isValid: true,
+        transactionId: transactionId,
+        productId: productId,
+        purchaseDate: new Date(purchaseDate),
+        verificationData: products
+      };
+    } catch (error) {
+      console.error('Apple receipt verification for Yatra failed:', error);
+      return { isValid: false, error: error.message };
+    }
+  }
+
+  async sendYatraPurchaseNotification(userId, email) {
+    try {
+      console.log('Sending Yatra purchase notification SMS');
+      
+      // 사용자 정보 조회
+      const { data: userProfile, error: userError } = await supabase
+        .from('profiles')
+        .select('name, phone_number')
+        .eq('id', userId)
+        .single();
+
+      if (userError) {
+        console.error('Failed to get user profile:', userError);
+        throw new Error('Failed to get user profile');
+      }
+
+      const userName = userProfile?.name || '사용자';
+      const userPhone = userProfile?.phone_number || '정보없음';
+      
+      // 관리자에게 SMS 전송
+      const adminPhone = '010-8335-7026';
+      const message = `[야트라 패키지 구매 알림]
+      
+구매자: ${userName}
+전화번호: ${userPhone}
+이메일: ${email}
+구매시간: ${new Date().toLocaleString('ko-KR')}
+
+PDF 파일과 구직 확정권을 이메일로 발송해 주세요.`;
+
+      const result = await this.messageService.send({
+        'to': adminPhone,
+        'from': process.env.SENDER_PHONE,
+        'text': message
+      });
+
+      console.log('Yatra purchase notification SMS sent successfully:', result);
+      return { success: true };
+
+    } catch (error) {
+      console.error('Failed to send Yatra purchase notification:', error);
+      throw new Error('SMS notification failed');
+    }
   }
 }
 

@@ -194,6 +194,111 @@ class PurchaseController {
       });
     }
   }
+
+  async verifyYatraPurchase(req, res) {
+    try {
+      console.log('=== Yatra Package Purchase Verification ===');
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      console.log('User ID from token:', req.user?.userId);
+      
+      const { platform, receiptData, purchaseToken, email, productId } = req.body;
+      const userId = req.user.userId;
+
+      if (!platform || !userId || !email) {
+        console.log('Missing required parameters - platform:', platform, 'userId:', userId, 'email:', email);
+        return res.status(400).json({
+          success: false,
+          error: 'Missing required parameters'
+        });
+      }
+
+      if (!productId || productId !== 'yatra_package_1') {
+        console.log('Invalid product ID:', productId);
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid product ID'
+        });
+      }
+
+      if (platform === 'ios' && !receiptData) {
+        console.log('Missing receipt data for iOS');
+        return res.status(400).json({
+          success: false,
+          error: 'Receipt data required for iOS'
+        });
+      }
+
+      if (platform === 'android' && !purchaseToken) {
+        console.log('Missing purchase token for Android');
+        return res.status(400).json({
+          success: false,
+          error: 'Purchase token required for Android'
+        });
+      }
+
+      console.log('Starting Yatra package purchase processing for platform:', platform);
+
+      const result = await purchaseService.processYatraPurchase(
+        userId,
+        email,
+        platform,
+        receiptData,
+        purchaseToken
+      );
+
+      res.json({
+        success: true,
+        tokensAdded: result.tokensAdded,
+        purchaseId: result.purchase.id,
+        message: 'Yatra package purchase completed successfully'
+      });
+
+    } catch (error) {
+      console.error('Yatra purchase verification failed:', error);
+      console.error('Error stack:', error.stack);
+      
+      let statusCode = 500;
+      let errorMessage = 'Internal server error';
+      let detailMessage = error.message;
+
+      if (error.message.includes('already processed')) {
+        statusCode = 409;
+        errorMessage = 'Purchase already processed';
+        detailMessage = '이미 처리된 구매입니다.';
+      } else if (error.message.includes('verification failed')) {
+        statusCode = 400;
+        errorMessage = 'Invalid receipt';
+        detailMessage = '구매 영수증 검증에 실패했습니다.';
+      } else if (error.message.includes('Google Auth failed') || error.message.includes('authentication credential')) {
+        statusCode = 503;
+        errorMessage = 'Service temporarily unavailable';
+        detailMessage = 'Google Play API 인증에 실패했습니다. 잠시 후 다시 시도해주세요.';
+      } else if (error.message.includes('SMS notification failed')) {
+        // SMS 실패해도 구매는 성공으로 처리
+        console.warn('SMS notification failed but purchase was successful');
+        return res.json({
+          success: true,
+          tokensAdded: 20,
+          message: 'Yatra package purchase completed successfully'
+        });
+      }
+
+      const responseData = {
+        success: false,
+        error: errorMessage,
+        message: detailMessage
+      };
+
+      if (process.env.NODE_ENV === 'development') {
+        responseData.debugInfo = {
+          originalError: error.message,
+          stack: error.stack
+        };
+      }
+
+      res.status(statusCode).json(responseData);
+    }
+  }
 }
 
 module.exports = new PurchaseController();
