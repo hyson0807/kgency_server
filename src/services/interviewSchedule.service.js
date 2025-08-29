@@ -4,28 +4,30 @@ const notificationService = require('./notification.service');
 
 exports.createSchedule = async (proposalId, interviewSlotId) => {
     try {
-        // 1. 선택된 슬롯이 아직 사용 가능한지 확인
+        // 1. 선택된 슬롯 정보 가져오기
         const { data: slot, error: slotError } = await supabase
             .from('interview_slots')
             .select('*')
             .eq('id', interviewSlotId)
-            .eq('is_available', true)
             .single();
 
         if (slotError || !slot) {
-            throw new Error('선택한 시간대를 사용할 수 없습니다.');
+            throw new Error('선택한 시간대를 찾을 수 없습니다.');
         }
 
-        // 2. 이미 해당 슬롯에 confirmed된 일정이 있는지 확인
-        const { data: existingConfirmedSchedule } = await supabase
+        // 2. 해당 슬롯에 confirmed된 예약 수 확인
+        const { data: confirmedSchedules, count } = await supabase
             .from('interview_schedules')
-            .select('id')
+            .select('id', { count: 'exact' })
             .eq('interview_slot_id', interviewSlotId)
-            .eq('status', 'confirmed')
-            .single();
+            .eq('status', 'confirmed');
 
-        if (existingConfirmedSchedule) {
-            throw new Error('이미 예약된 시간대입니다.');
+        const currentBookings = count || 0;
+        const maxCapacity = slot.max_capacity || 1;
+
+        // 3. 예약 가능 여부 확인
+        if (currentBookings >= maxCapacity) {
+            throw new Error('이 시간대는 이미 정원이 찼습니다.');
         }
 
         // 3. 해당 proposal에 대한 기존 schedule이 있는지 확인
@@ -75,6 +77,19 @@ exports.createSchedule = async (proposalId, interviewSlotId) => {
             .eq('id', proposalId);
 
         if (proposalError) throw proposalError;
+
+        // 4-1. 슬롯의 current_capacity 업데이트
+        const { error: slotUpdateError } = await supabase
+            .from('interview_slots')
+            .update({ 
+                current_capacity: currentBookings + 1,
+                is_available: currentBookings + 1 < maxCapacity
+            })
+            .eq('id', interviewSlotId);
+
+        if (slotUpdateError) {
+            console.error('Failed to update slot capacity:', slotUpdateError);
+        }
 
         // 5. 알림 발송을 위한 데이터 조회
         const { data: proposalData, error: proposalDataError } = await supabase
@@ -523,6 +538,38 @@ exports.cancelSchedule = async (scheduleId, companyId) => {
 
         if (updateError) throw updateError;
 
+        // 슬롯의 current_capacity 감소
+        if (schedule.interview_slot_id) {
+            // 현재 슬롯의 confirmed 예약 수 다시 계산
+            const { count } = await supabase
+                .from('interview_schedules')
+                .select('id', { count: 'exact' })
+                .eq('interview_slot_id', schedule.interview_slot_id)
+                .eq('status', 'confirmed');
+
+            const newCapacity = count || 0;
+
+            // 슬롯 정보 업데이트
+            const { data: slotInfo } = await supabase
+                .from('interview_slots')
+                .select('max_capacity')
+                .eq('id', schedule.interview_slot_id)
+                .single();
+
+            const maxCapacity = slotInfo?.max_capacity || 1;
+
+            const { error: slotUpdateError } = await supabase
+                .from('interview_slots')
+                .update({ 
+                    current_capacity: newCapacity,
+                    is_available: newCapacity < maxCapacity
+                })
+                .eq('id', schedule.interview_slot_id);
+
+            if (slotUpdateError) {
+                console.error('Failed to update slot capacity after cancellation:', slotUpdateError);
+            }
+        }
 
 
         if (applicationType === 'user_initiated') {

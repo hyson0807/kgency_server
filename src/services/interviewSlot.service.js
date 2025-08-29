@@ -91,8 +91,39 @@ exports.create = async (companyId, slots) => {
                     start_time: startTime,
                     end_time: endTime,
                     interview_type: slot.interviewType,
-                    is_available: true
+                    is_available: true,
+                    max_capacity: slot.maxCapacity || 1,
+                    current_capacity: 0
                 });
+            } else if (existingSlot && slot.maxCapacity) {
+                // 기존 슬롯이 있고 maxCapacity를 변경하려는 경우
+                // 현재 예약 수 확인
+                const { count: bookingCount } = await supabase
+                    .from('interview_schedules')
+                    .select('id', { count: 'exact' })
+                    .eq('interview_slot_id', existingSlot.id)
+                    .eq('status', 'confirmed');
+                
+                const currentBookings = bookingCount || 0;
+                
+                // 예약 수보다 작게 설정할 수 없음
+                if (slot.maxCapacity < currentBookings) {
+                    console.log(`Cannot reduce capacity below current bookings: ${currentBookings}`);
+                    continue;
+                }
+                
+                // max_capacity 업데이트
+                const { error: updateError } = await supabase
+                    .from('interview_slots')
+                    .update({ 
+                        max_capacity: slot.maxCapacity,
+                        is_available: currentBookings < slot.maxCapacity
+                    })
+                    .eq('id', existingSlot.id);
+                
+                if (updateError) {
+                    console.error('Failed to update slot capacity:', updateError);
+                }
             }
         }
 
@@ -190,7 +221,7 @@ exports.getAll = async (companyId) => {
             return [];
         }
 
-        // 예약된 슬롯 조회 (confirmed 상태만)
+        // 예약된 슬롯별 예약 수 조회 (confirmed 상태만)
         const slotIds = slots.map(s => s.id);
 
         const { data: bookedSchedules } = await supabase
@@ -199,13 +230,26 @@ exports.getAll = async (companyId) => {
             .eq('status', 'confirmed')
             .in('interview_slot_id', slotIds);
 
-        const bookedSlotIds = new Set(bookedSchedules?.map(s => s.interview_slot_id) || []);
+        // 슬롯별 예약 수 계산
+        const bookingCountMap = {};
+        bookedSchedules?.forEach(schedule => {
+            bookingCountMap[schedule.interview_slot_id] = 
+                (bookingCountMap[schedule.interview_slot_id] || 0) + 1;
+        });
 
-        // 각 슬롯에 예약 여부 추가
-        const slotsWithBookingStatus = slots.map(slot => ({
-            ...slot,
-            is_booked: bookedSlotIds.has(slot.id)
-        }));
+        // 각 슬롯에 예약 정보 추가
+        const slotsWithBookingStatus = slots.map(slot => {
+            const currentBookings = bookingCountMap[slot.id] || 0;
+            const maxCapacity = slot.max_capacity || 1;
+            
+            return {
+                ...slot,
+                current_capacity: currentBookings,
+                max_capacity: maxCapacity,
+                is_booked: currentBookings >= maxCapacity,
+                available_spots: maxCapacity - currentBookings
+            };
+        });
 
         return slotsWithBookingStatus;
     } catch (error) {
