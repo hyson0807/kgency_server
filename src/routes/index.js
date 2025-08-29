@@ -18,6 +18,7 @@ const messageRoutes = require('./message.routes');
 const userRoutes = require('./user.routes');
 const jobSeekerRoutes = require('./jobSeeker.routes');
 const purchaseRoutes = require('./purchase.routes');
+const appInitRoutes = require('./appInit.routes'); // 추가
 const healthController = require('../controllers/health.controller');
 
 
@@ -57,6 +58,9 @@ router.use('/interview-proposals', interviewRoutes);
 router.use('/interview-schedules', interviewScheduleRoutes);
 
 router.use('/purchase', purchaseRoutes);
+
+// 앱 초기화 라우트 추가
+router.use('/app-init', appInitRoutes);
 
 // 404 처리
 router.use((req, res) => {
