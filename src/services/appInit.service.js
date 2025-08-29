@@ -1,77 +1,150 @@
 // src/services/appInit.service.js
 const { supabase } = require('../config/database');
 const cacheManager = require('../utils/cacheManager');
+const { withDatabaseRetry, withCacheRetry } = require('../utils/retryHandler');
 
-// 메인 초기화 데이터 수집
+// 메인 초기화 데이터 수집 (재시도 메커니즘 적용)
 const getBootstrapData = async (userId, userType) => {
-  try {
-    // 병렬로 필수 데이터 수집
-    const [keywords, userEssentials, appConfig] = await Promise.all([
-      getAllKeywords(),
-      getUserEssentials(userId, userType),
-      getAppConfig()
-    ]);
+  return await withDatabaseRetry(async () => {
+    try {
+      console.log(`🚀 초기화 데이터 수집 시작: ${userType}(${userId})`);
+      
+      // Promise.allSettled로 부분 실패 허용
+      const [keywords, userEssentials, appConfig] = await Promise.allSettled([
+        getAllKeywords(),
+        getUserEssentials(userId, userType),
+        getAppConfig()
+      ]);
 
-    return {
-      keywords: keywords,
-      userEssentials: userEssentials,
-      config: appConfig
-    };
-    
-  } catch (error) {
-    console.error('초기화 데이터 수집 실패:', error);
-    throw new Error('초기화 데이터를 수집할 수 없습니다.');
-  }
+      const result = {};
+      const errors = [];
+
+      // 키워드 데이터 (필수)
+      if (keywords.status === 'fulfilled') {
+        result.keywords = keywords.value;
+      } else {
+        console.error('키워드 로딩 실패:', keywords.reason);
+        errors.push({ operation: 'keywords', error: keywords.reason.message });
+        
+        // 폴백으로 캐시된 키워드 시도
+        const fallbackKeywords = await withCacheRetry(() => 
+          cacheManager.get('keywords:all', true)
+        );
+        if (fallbackKeywords) {
+          result.keywords = fallbackKeywords;
+          console.log('✅ 폴백 키워드 데이터 사용');
+        } else {
+          throw new Error('필수 키워드 데이터를 불러올 수 없습니다.');
+        }
+      }
+
+      // 사용자 필수 데이터
+      if (userEssentials.status === 'fulfilled') {
+        result.userEssentials = userEssentials.value;
+      } else {
+        console.error('사용자 데이터 로딩 실패:', userEssentials.reason);
+        errors.push({ operation: 'userEssentials', error: userEssentials.reason.message });
+        
+        // 부분적 폴백 데이터 시도
+        const fallbackData = await getFallbackData(userId, userType);
+        result.userEssentials = fallbackData.userEssentials || {};
+      }
+
+      // 앱 설정 (항상 기본값 제공)
+      if (appConfig.status === 'fulfilled') {
+        result.config = appConfig.value;
+      } else {
+        console.warn('앱 설정 로딩 실패, 기본값 사용:', appConfig.reason);
+        result.config = getDefaultAppConfig();
+      }
+
+      console.log(`✅ 초기화 데이터 수집 완료 (에러: ${errors.length}개)`);
+      
+      return {
+        ...result,
+        errors: errors.length > 0 ? errors : undefined,
+        timestamp: new Date().toISOString()
+      };
+      
+    } catch (error) {
+      console.error('초기화 데이터 수집 중대 오류:', error);
+      throw new Error(`초기화 데이터를 수집할 수 없습니다: ${error.message}`);
+    }
+  });
 };
 
-// 키워드 마스터 데이터 (캐싱 적용)
+// 키워드 마스터 데이터 (재시도 + 캐싱 적용)
 const getAllKeywords = async () => {
   const cacheKey = 'keywords:all';
   
-  try {
-    // 캐시 확인
-    const cached = await cacheManager.get(cacheKey);
-    if (cached) {
-      console.log('키워드 캐시 히트');
-      return cached;
-    }
-
-    console.log('키워드 DB에서 로딩');
-    
-    // DB에서 조회
-    const { data: keywords, error } = await supabase
-      .from('keyword')
-      .select('*')
-      .order('category', { ascending: true })
-      .order('keyword', { ascending: true });
-
-    if (error) throw error;
-
-    // 카테고리별로 그룹화
-    const byCategory = keywords.reduce((acc, keyword) => {
-      if (!acc[keyword.category]) {
-        acc[keyword.category] = [];
+  return await withCacheRetry(async () => {
+    try {
+      // 캐시 확인
+      const cached = await cacheManager.get(cacheKey);
+      if (cached) {
+        console.log('📦 키워드 캐시 히트');
+        return cached;
       }
-      acc[keyword.category].push(keyword);
-      return acc;
-    }, {});
 
-    const result = {
-      data: keywords,
-      byCategory: byCategory,
-      version: generateKeywordVersion(keywords),
-      lastUpdated: new Date().toISOString()
-    };
+      console.log('🔍 키워드 DB에서 로딩...');
+      
+      // DB에서 조회 (재시도 적용)
+      const { data: keywords, error } = await withDatabaseRetry(() => 
+        supabase
+          .from('keyword')
+          .select('*')
+          .order('category', { ascending: true })
+          .order('keyword', { ascending: true })
+      );
 
-    // 캐시에 저장 (24시간)
-    await cacheManager.set(cacheKey, result, 24 * 60 * 60);
-    
-    return result;
-    
-  } catch (error) {
-    console.error('키워드 조회 실패:', error);
-    throw new Error('키워드 데이터를 조회할 수 없습니다.');
-  }
+      if (error) throw error;
+      if (!keywords || keywords.length === 0) {
+        throw new Error('키워드 데이터가 비어있습니다.');
+      }
+
+      // 카테고리별로 그룹화
+      const byCategory = keywords.reduce((acc, keyword) => {
+        if (!acc[keyword.category]) {
+          acc[keyword.category] = [];
+        }
+        acc[keyword.category].push(keyword);
+        return acc;
+      }, {});
+
+      const result = {
+        data: keywords,
+        byCategory: byCategory,
+        version: generateKeywordVersion(keywords),
+        lastUpdated: new Date().toISOString(),
+        count: keywords.length,
+        categories: Object.keys(byCategory).length
+      };
+
+      // 캐시에 저장 (24시간, 재시도 적용)
+      await withCacheRetry(() => 
+        cacheManager.set(cacheKey, result, 24 * 60 * 60)
+      );
+      
+      console.log(`✅ 키워드 로딩 완료: ${result.count}개 (${result.categories}개 카테고리)`);
+      return result;
+      
+    } catch (error) {
+      console.error('❌ 키워드 조회 실패:', error);
+      
+      // 만료된 캐시라도 있다면 사용
+      const expiredCache = await cacheManager.get(cacheKey, true);
+      if (expiredCache) {
+        console.warn('⚠️ 만료된 키워드 캐시 사용');
+        return {
+          ...expiredCache,
+          isExpired: true,
+          fallbackUsed: true
+        };
+      }
+      
+      throw new Error(`키워드 데이터를 조회할 수 없습니다: ${error.message}`);
+    }
+  });
 };
 
 // 사용자별 필수 데이터
@@ -184,36 +257,45 @@ const getCompanyBootstrapData = async (companyId) => {
   }
 };
 
-// 개별 데이터 조회 함수들
+// 개별 데이터 조회 함수들 (재시도 적용)
 const getUserProfile = async (userId) => {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select(`
-      *,
-      user_info (*)
-    `)
-    .eq('id', userId)
-    .single();
+  return await withDatabaseRetry(async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select(`
+        *,
+        user_info (*)
+      `)
+      .eq('id', userId)
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        throw new Error(`사용자 프로필을 찾을 수 없습니다: ${userId}`);
+      }
+      throw error;
+    }
+    return data;
+  });
 };
 
 const getUserKeywords = async (userId) => {
-  const { data, error } = await supabase
-    .from('user_keyword')
-    .select(`
-      keyword_id,
-      keyword:keyword_id (
-        id,
-        keyword,
-        category
-      )
-    `)
-    .eq('user_id', userId);
+  return await withDatabaseRetry(async () => {
+    const { data, error } = await supabase
+      .from('user_keyword')
+      .select(`
+        keyword_id,
+        keyword:keyword_id (
+          id,
+          keyword,
+          category
+        )
+      `)
+      .eq('user_id', userId);
 
-  if (error) throw error;
-  return data || [];
+    if (error) throw error;
+    return data || [];
+  });
 };
 
 const getRecentApplications = async (userId, limit) => {
@@ -254,14 +336,21 @@ const getUserInfo = async (userId) => {
 };
 
 const getCompanyProfile = async (companyId) => {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', companyId)
-    .single();
+  return await withDatabaseRetry(async () => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', companyId)
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) {
+      if (error.code === 'PGRST116') {
+        throw new Error(`회사 프로필을 찾을 수 없습니다: ${companyId}`);
+      }
+      throw error;
+    }
+    return data;
+  });
 };
 
 const getCompanyKeywords = async (companyId) => {
@@ -304,12 +393,24 @@ const getActiveJobPostings = async (companyId, limit) => {
 
 // 앱 설정 정보
 const getAppConfig = async () => {
+  try {
+    // 향후 DB에서 동적 설정을 가져올 수 있도록 확장 가능
+    return getDefaultAppConfig();
+  } catch (error) {
+    console.warn('앱 설정 로딩 실패, 기본값 사용:', error);
+    return getDefaultAppConfig();
+  }
+};
+
+// 기본 앱 설정
+const getDefaultAppConfig = () => {
   return {
     features: {
       instantInterview: true,
       yatra: true,
       notifications: true,
-      translation: true
+      translation: true,
+      offlineMode: false
     },
     notifications: {
       enabled: true,
@@ -318,6 +419,18 @@ const getAppConfig = async () => {
     maintenance: {
       enabled: false,
       message: null
+    },
+    api: {
+      version: process.env.API_VERSION || '1.0.0',
+      timeout: 30000
+    },
+    cache: {
+      enabled: true,
+      ttl: {
+        keywords: 24 * 60 * 60, // 24시간
+        profile: 60 * 60, // 1시간
+        applications: 10 * 60 // 10분
+      }
     }
   };
 };
@@ -364,22 +477,46 @@ const getDataVersion = () => {
 };
 
 const checkHealth = async () => {
+  const health = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    services: {}
+  };
+  
   try {
-    // DB 연결 확인
-    const { error } = await supabase
-      .from('keyword')
-      .select('count(*)')
-      .limit(1);
+    // DB 연결 확인 (재시도 적용)
+    await withDatabaseRetry(async () => {
+      const { error } = await supabase
+        .from('keyword')
+        .select('count(*)')
+        .limit(1);
+      
+      if (error) throw error;
+    });
     
-    if (error) throw error;
-
-    return {
-      status: 'healthy',
-      database: 'connected',
-      timestamp: new Date().toISOString()
-    };
+    health.services.database = { status: 'connected', latency: null };
+    
+    // 캐시 상태 확인
+    const cacheHealth = await cacheManager.healthCheck();
+    health.services.cache = cacheHealth;
+    
+    // 전체 상태 결정
+    const hasFailures = Object.values(health.services).some(
+      service => service.status === false || service.redis === false
+    );
+    
+    if (hasFailures) {
+      health.status = 'degraded';
+    }
+    
+    return health;
+    
   } catch (error) {
-    throw new Error('데이터베이스 연결 실패');
+    health.status = 'unhealthy';
+    health.error = error.message;
+    health.services.database = { status: 'disconnected', error: error.message };
+    
+    throw new Error(`헬스체크 실패: ${error.message}`);
   }
 };
 
@@ -389,5 +526,6 @@ module.exports = {
   getUserEssentials,
   getFallbackData,
   getDataVersion,
+  getDefaultAppConfig,
   checkHealth
 };
