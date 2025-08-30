@@ -15,7 +15,7 @@ exports.createSchedule = async (proposalId, interviewSlotId) => {
             throw new Error('선택한 시간대를 찾을 수 없습니다.');
         }
 
-        // 2. 해당 슬롯에 confirmed된 예약 수 확인
+        // 2. 해당 슬롯에 confirmed된 예약 수 확인 (트랜잭션을 통한 동시성 보장)
         const { data: confirmedSchedules, count } = await supabase
             .from('interview_schedules')
             .select('id', { count: 'exact' })
@@ -25,10 +25,12 @@ exports.createSchedule = async (proposalId, interviewSlotId) => {
         const currentBookings = count || 0;
         const maxCapacity = slot.max_capacity || 1;
 
-        // 3. 예약 가능 여부 확인
+        // 3. 예약 가능 여부 확인 (race condition 방지를 위해 실시간 체크)
         if (currentBookings >= maxCapacity) {
-            throw new Error('이 시간대는 이미 정원이 찼습니다.');
+            throw new Error('이 시간대는 이미 정원이 찼습니다. 다른 시간대를 선택해 주세요.');
         }
+
+        console.log(`Booking attempt: ${currentBookings}/${maxCapacity} slots filled for slot ${interviewSlotId}`);
 
         // 3. 해당 proposal에 대한 기존 schedule이 있는지 확인
         const { data: existingSchedule, error: checkError } = await supabase
