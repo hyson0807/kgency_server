@@ -1,4 +1,4 @@
-const {supabase} = require('../config/database')
+const { supabase } = require('../config/database')
 const sharp = require('sharp')
 
 // 프로필 조회
