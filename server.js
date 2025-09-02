@@ -24,6 +24,8 @@ requiredEnvVars.forEach(varName => {
 // 앱 가져오기
 const app = require('./src/app');
 const { port } = require('./src/config');
+const { Server } = require('socket.io');
+const ChatSocketHandler = require('./src/socket/chatSocket');
 
 // 서버 시작
 const server = app.listen(port, () => {
@@ -34,6 +36,28 @@ const server = app.listen(port, () => {
 📅 Started at: ${new Date().toISOString()}
     `);
 });
+
+// Socket.io 설정
+const io = new Server(server, {
+    cors: {
+        origin: process.env.NODE_ENV === 'production' 
+            ? [
+                process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : "*"
+              ].flat()
+            : ["http://localhost:8081", "http://localhost:8082", "http://localhost:19006", "exp://192.168.0.15:8081"],
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    transports: ['websocket', 'polling'],
+    pingTimeout: 60000,
+    pingInterval: 25000
+});
+
+// 채팅 Socket 핸들러 초기화
+const chatHandler = new ChatSocketHandler(io);
+chatHandler.setupEventHandlers();
+
+console.log('🔌 Socket.io 서버가 초기화되었습니다.');
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
