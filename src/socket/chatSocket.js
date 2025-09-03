@@ -10,7 +10,10 @@ class ChatSocketHandler {
   // Socket.io 이벤트 핸들러 등록
   setupEventHandlers() {
     this.io.on('connection', (socket) => {
-      console.log(`클라이언트 연결: ${socket.id}`);
+      console.log(`클라이언트 연결: ${socket.id}`, {
+        총연결수: this.io.engine.clientsCount,
+        인증된사용자수: this.authenticatedUsers.size
+      });
 
       // JWT 인증
       socket.on('authenticate', async (token) => {
@@ -78,7 +81,10 @@ class ChatSocketHandler {
       // 사용자 매핑 저장
       this.authenticatedUsers.set(user.id, socket.id);
 
-      console.log(`사용자 인증 성공: ${user.id} (${user.user_type})`);
+      console.log(`사용자 인증 성공: ${user.id} (${user.user_type})`, {
+        socketId: socket.id,
+        totalAuthenticatedUsers: this.authenticatedUsers.size
+      });
       socket.emit('authenticated', { 
         success: true, 
         user: { id: user.id, name: user.name, user_type: user.user_type }
@@ -118,6 +124,9 @@ class ChatSocketHandler {
       socket.currentRoomId = roomId;
 
       console.log(`사용자 ${socket.userId}가 채팅방 ${roomId}에 입장했습니다.`);
+      
+      // 채팅방 입장 시 읽지 않은 메시지 카운트 리셋
+      await this.resetUnreadCountOnJoin(roomId, socket.userId, room);
       
       socket.emit('joined-room', { roomId, success: true });
 
@@ -186,8 +195,8 @@ class ChatSocketHandler {
         is_read: false
       });
 
-      // 채팅방 정보 업데이트 (마지막 메시지, 읽지 않은 메시지 수)
-      await this.updateChatRoomInfo(roomId, message.trim(), socket.userId, room);
+      // 실시간 업데이트를 위한 채팅방 정보 조회 및 알림 전송
+      await this.notifyRoomUpdate(roomId, socket.userId, room);
 
       console.log(`메시지 전송 완료: ${socket.userId} -> 채팅방 ${roomId}`);
 
@@ -197,34 +206,108 @@ class ChatSocketHandler {
     }
   }
 
-  // 채팅방 정보 업데이트 (마지막 메시지, 읽지 않은 메시지 수)
-  async updateChatRoomInfo(roomId, lastMessage, senderId, room) {
+  // 메시지 전송 후 실시간 알림 (데이터베이스 트리거가 이미 카운트를 업데이트함)
+  async notifyRoomUpdate(roomId, senderId, room) {
     try {
-      // 읽지 않은 메시지 수 증가
-      const updates = {
-        last_message: lastMessage,
-        last_message_at: new Date().toISOString()
-      };
+      // 데이터베이스 트리거에 의해 업데이트된 최신 채팅방 정보 조회
+      const { data: updatedRoom, error } = await supabase
+        .from('chat_rooms')
+        .select('last_message, last_message_at, user_unread_count, company_unread_count')
+        .eq('id', roomId)
+        .single();
 
-      // 발신자가 아닌 사용자의 읽지 않은 메시지 수 증가
-      if (senderId === room.user_id) {
-        // 구직자가 보낸 메시지 -> 회사의 읽지 않은 메시지 수 증가
-        updates.company_unread_count = supabase.rpc('increment', { x: 1 });
-      } else {
-        // 회사가 보낸 메시지 -> 구직자의 읽지 않은 메시지 수 증가
-        updates.user_unread_count = supabase.rpc('increment', { x: 1 });
+      if (error) {
+        console.error('업데이트된 채팅방 정보 조회 실패:', error);
+        return;
       }
 
+      // 메시지를 받을 사용자 결정 (발신자가 아닌 사용자)
+      const receiverId = senderId === room.user_id ? room.company_id : room.user_id;
+      const receiverUnreadCount = senderId === room.user_id 
+        ? updatedRoom.company_unread_count 
+        : updatedRoom.user_unread_count;
+
+      // 채팅방 목록 업데이트 이벤트 전송
+      this.sendToUser(receiverId, 'chat-room-updated', {
+        roomId,
+        last_message: updatedRoom.last_message,
+        last_message_at: updatedRoom.last_message_at,
+        unread_count: receiverUnreadCount
+      });
+
+      // 전체 안읽은 메시지 카운트 조회 및 전송
+      await this.sendTotalUnreadCount(receiverId);
+
+    } catch (error) {
+      console.error('채팅방 업데이트 알림 실패:', error);
+    }
+  }
+
+
+  // 총 안읽은 메시지 카운트 전송
+  async sendTotalUnreadCount(userId) {
+    try {
+      const { data: rooms, error } = await supabase
+        .from('chat_rooms')
+        .select('user_unread_count, company_unread_count, user_id, company_id')
+        .or(`user_id.eq.${userId},company_id.eq.${userId}`)
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('총 안읽은 메시지 카운트 조회 실패:', error);
+        return;
+      }
+
+      // 해당 사용자의 총 안읽은 메시지 수 계산
+      let totalUnreadCount = 0;
+      rooms.forEach(room => {
+        if (room.user_id === userId) {
+          totalUnreadCount += room.user_unread_count || 0;
+        } else if (room.company_id === userId) {
+          totalUnreadCount += room.company_unread_count || 0;
+        }
+      });
+
+      // 총 안읽은 메시지 카운트 전송
+      this.sendToUser(userId, 'total-unread-count-updated', {
+        totalUnreadCount
+      });
+
+    } catch (error) {
+      console.error('총 안읽은 메시지 카운트 전송 실패:', error);
+    }
+  }
+
+  // 채팅방 입장 시 읽지 않은 메시지 카운트 리셋
+  async resetUnreadCountOnJoin(roomId, userId, room) {
+    try {
+      // 현재 사용자의 읽지 않은 메시지 카운트를 0으로 리셋
+      const isUser = room.user_id === userId;
+      const updateField = isUser ? 'user_unread_count' : 'company_unread_count';
+      
       const { error } = await supabase
         .from('chat_rooms')
-        .update(updates)
+        .update({ [updateField]: 0 })
         .eq('id', roomId);
 
       if (error) {
-        console.error('채팅방 정보 업데이트 실패:', error);
+        console.error('읽지 않은 메시지 카운트 리셋 실패:', error);
+        return;
       }
+
+      // 채팅방의 모든 메시지를 읽음 처리
+      await supabase
+        .from('chat_messages')
+        .update({ is_read: true })
+        .eq('room_id', roomId)
+        .neq('sender_id', userId)
+        .eq('is_read', false);
+
+      // 총 안읽은 메시지 카운트 업데이트 전송
+      await this.sendTotalUnreadCount(userId);
+
     } catch (error) {
-      console.error('채팅방 정보 업데이트 오류:', error);
+      console.error('채팅방 입장 시 읽지 않은 메시지 카운트 리셋 실패:', error);
     }
   }
 
@@ -255,9 +338,20 @@ class ChatSocketHandler {
   // 특정 사용자에게 메시지 전송 (유틸리티 메서드)
   sendToUser(userId, event, data) {
     const socketId = this.authenticatedUsers.get(userId);
+    console.log(`sendToUser 호출: userId=${userId}, event=${event}`, { 
+      socketId, 
+      hasSocket: !!socketId,
+      authenticatedCount: this.authenticatedUsers.size,
+      data 
+    });
+    
     if (socketId) {
       this.io.to(socketId).emit(event, data);
+      console.log(`이벤트 전송 완료: ${event} -> ${socketId}`);
       return true;
+    } else {
+      console.log(`사용자 ${userId}의 소켓을 찾을 수 없음. 인증된 사용자 목록:`, 
+        Array.from(this.authenticatedUsers.keys()));
     }
     return false;
   }

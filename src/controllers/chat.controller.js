@@ -276,6 +276,12 @@ const markMessagesAsRead = async (req, res) => {
             console.error('Error updating room unread count:', roomUpdateError);
         }
 
+        // WebSocket을 통한 실시간 총 안읽은 메시지 카운트 전송 (있다면)
+        const io = req.app.get('io');
+        if (io && io.chatHandler) {
+            await io.chatHandler.sendTotalUnreadCount(userId);
+        }
+
         res.json({
             success: true,
             message: '메시지를 읽음 처리했습니다.'
@@ -360,6 +366,48 @@ const createChatRoom = async (req, res) => {
     }
 };
 
+// 총 안읽은 메시지 카운트 조회
+const getTotalUnreadCount = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        
+        const { data: rooms, error } = await supabase
+            .from('chat_rooms')
+            .select('user_unread_count, company_unread_count, user_id, company_id')
+            .or(`user_id.eq.${userId},company_id.eq.${userId}`)
+            .eq('is_active', true);
+
+        if (error) {
+            console.error('Error fetching total unread count:', error);
+            return res.status(500).json({
+                success: false,
+                error: '안읽은 메시지 카운트 조회에 실패했습니다.'
+            });
+        }
+
+        // 해당 사용자의 총 안읽은 메시지 수 계산
+        let totalUnreadCount = 0;
+        rooms.forEach(room => {
+            if (room.user_id === userId) {
+                totalUnreadCount += room.user_unread_count || 0;
+            } else if (room.company_id === userId) {
+                totalUnreadCount += room.company_unread_count || 0;
+            }
+        });
+
+        res.json({
+            success: true,
+            data: { totalUnreadCount }
+        });
+    } catch (error) {
+        console.error('Error in getTotalUnreadCount:', error);
+        res.status(500).json({
+            success: false,
+            error: '서버 오류가 발생했습니다.'
+        });
+    }
+};
+
 module.exports = {
     getUserChatRooms,
     getCompanyChatRooms,
@@ -367,5 +415,6 @@ module.exports = {
     getChatMessages,
     sendMessage,
     markMessagesAsRead,
-    createChatRoom
+    createChatRoom,
+    getTotalUnreadCount
 };
