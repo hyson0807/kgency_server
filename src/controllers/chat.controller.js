@@ -459,6 +459,73 @@ const getTotalUnreadCount = async (req, res) => {
     }
 };
 
+// 기존 채팅방 찾기 (동일한 회사와의 채팅방)
+const findExistingRoom = async (req, res) => {
+    try {
+        const { user_id, company_id } = req.query;
+        const currentUserId = req.user.userId;
+        
+        // 파라미터 검증
+        if (!user_id || !company_id) {
+            return res.status(400).json({
+                success: false,
+                error: '사용자 ID와 회사 ID가 필요합니다.'
+            });
+        }
+        
+        // 권한 검증 (요청자가 해당 사용자 본인인지 확인)
+        if (currentUserId !== user_id) {
+            return res.status(403).json({
+                success: false,
+                error: '접근 권한이 없습니다.'
+            });
+        }
+        
+        // 동일한 회사와의 기존 채팅방 찾기
+        const { data: existingRoom, error } = await supabase
+            .from('chat_rooms')
+            .select('id, application_id, job_posting_id')
+            .eq('user_id', user_id)
+            .eq('company_id', company_id)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(1);
+            
+        if (error) {
+            console.error('Error finding existing chat room:', error);
+            return res.status(500).json({
+                success: false,
+                error: '채팅방 검색 중 오류가 발생했습니다.'
+            });
+        }
+        
+        if (existingRoom && existingRoom.length > 0) {
+            return res.json({
+                success: true,
+                data: { 
+                    roomId: existingRoom[0].id,
+                    applicationId: existingRoom[0].application_id,
+                    jobPostingId: existingRoom[0].job_posting_id
+                },
+                message: '기존 채팅방을 찾았습니다.'
+            });
+        } else {
+            return res.json({
+                success: true,
+                data: null,
+                message: '기존 채팅방이 없습니다.'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error in findExistingRoom:', error);
+        res.status(500).json({
+            success: false,
+            error: '서버 오류가 발생했습니다.'
+        });
+    }
+};
+
 module.exports = {
     getUserChatRooms,
     getCompanyChatRooms,
@@ -467,5 +534,6 @@ module.exports = {
     sendMessage,
     markMessagesAsRead,
     createChatRoom,
+    findExistingRoom,
     getTotalUnreadCount
 };

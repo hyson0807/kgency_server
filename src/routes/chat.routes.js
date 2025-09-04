@@ -5,6 +5,7 @@ const chatController = require('../controllers/chat.controller');
 
 // 라우트 정의
 router.post('/create-room', authMiddleware, chatController.createChatRoom);
+router.get('/find-existing-room', authMiddleware, chatController.findExistingRoom);
 router.get('/user/rooms', authMiddleware, chatController.getUserChatRooms);
 router.get('/company/rooms', authMiddleware, chatController.getCompanyChatRooms);
 router.get('/room/:roomId', authMiddleware, chatController.getChatRoomInfo);
