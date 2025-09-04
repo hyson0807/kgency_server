@@ -137,11 +137,20 @@ const getChatRoomInfo = async (req, res) => {
     }
 };
 
-// 채팅 메시지 목록 가져오기
+// 채팅 메시지 목록 가져오기 (페이지네이션 지원)
 const getChatMessages = async (req, res) => {
     try {
         const { roomId } = req.params;
         const userId = req.user.userId;
+        
+        // 쿼리 파라미터 파싱
+        const page = parseInt(req.query.page) || 0;
+        const limit = parseInt(req.query.limit) || 20;
+        const before = req.query.before; // ISO 시간 문자열
+        const after = req.query.after;   // ISO 시간 문자열
+        
+        // limit 범위 검증 (1-100)
+        const validLimit = Math.max(1, Math.min(100, limit));
         
         // 헬퍼 함수로 권한 확인
         const validation = await validateChatRoomAccess(roomId, userId);
@@ -152,11 +161,33 @@ const getChatMessages = async (req, res) => {
             });
         }
 
-        const { data, error } = await supabase
+        let query = supabase
             .from('chat_messages')
-            .select('*')
-            .eq('room_id', roomId)
-            .order('created_at', { ascending: true });
+            .select('*', { count: 'exact' })
+            .eq('room_id', roomId);
+
+        // 시간 기반 필터링 (더 정확한 페이지네이션)
+        if (before) {
+            query = query.lt('created_at', before);
+        }
+        if (after) {
+            query = query.gt('created_at', after);
+        }
+
+        // 정렬: 최신 메시지부터 (내림차순)
+        query = query.order('created_at', { ascending: false });
+
+        // 페이지네이션 적용
+        if (!before && !after) {
+            // 기본 페이지네이션 (page 방식)
+            const offset = page * validLimit;
+            query = query.range(offset, offset + validLimit - 1);
+        } else {
+            // 시간 기반 페이지네이션에서도 limit 적용
+            query = query.limit(validLimit);
+        }
+
+        const { data, error, count } = await query;
 
         if (error) {
             console.error('Error fetching chat messages:', error);
@@ -166,9 +197,29 @@ const getChatMessages = async (req, res) => {
             });
         }
 
+        // 페이지네이션 정보 계산
+        const totalMessages = count || 0;
+        const totalPages = Math.ceil(totalMessages / validLimit);
+        const hasMore = (page + 1) < totalPages;
+        
+        // 다음 페이지를 위한 커서 (가장 오래된 메시지의 시간)
+        const nextCursor = data && data.length > 0 
+            ? data[data.length - 1].created_at 
+            : null;
+
         res.json({
             success: true,
-            data: data || []
+            data: {
+                messages: data || [],
+                pagination: {
+                    page,
+                    limit: validLimit,
+                    totalMessages,
+                    totalPages,
+                    hasMore,
+                    nextCursor
+                }
+            }
         });
     } catch (error) {
         console.error('Error in getChatMessages:', error);
