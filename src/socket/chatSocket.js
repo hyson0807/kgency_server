@@ -122,7 +122,11 @@ class ChatSocketHandler {
         .single();
 
       if (error || !room) {
-        throw new Error('채팅방을 찾을 수 없습니다.');
+        const errorMessage = error?.code === 'PGRST116' 
+          ? '채팅방을 찾을 수 없습니다. 상대방이 탈퇴했거나 채팅방이 삭제되었을 수 있습니다.'
+          : '채팅방에 접근할 수 없습니다.';
+        console.log(`채팅방 ${roomId} 접근 실패: ${errorMessage}`, { userId: socket.userId, error: error?.code });
+        throw new Error(errorMessage);
       }
 
       // 권한 확인 (채팅방 참여자만 접근 가능)

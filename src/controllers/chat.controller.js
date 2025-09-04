@@ -25,9 +25,15 @@ const getUserChatRooms = async (req, res) => {
             });
         }
 
+        // 탈퇴한 사용자가 포함된 채팅방 처리
+        const processedData = (data || []).map(room => ({
+            ...room,
+            company: room.company || { name: '탈퇴한 회사' }
+        }));
+
         res.json({
             success: true,
-            data: data || []
+            data: processedData
         });
     } catch (error) {
         console.error('Error in getUserChatRooms:', error);
@@ -62,9 +68,15 @@ const getCompanyChatRooms = async (req, res) => {
             });
         }
 
+        // 탈퇴한 사용자가 포함된 채팅방 처리
+        const processedData = (data || []).map(room => ({
+            ...room,
+            user: room.user || { name: '탈퇴한 사용자' }
+        }));
+
         res.json({
             success: true,
-            data: data || []
+            data: processedData
         });
     } catch (error) {
         console.error('Error in getCompanyChatRooms:', error);
@@ -96,13 +108,38 @@ const getChatRoomInfo = async (req, res) => {
 
         if (error) {
             const status = error.code === 'PGRST116' ? 404 : 500;
-            const message = error.code === 'PGRST116' 
-                ? '채팅방을 찾을 수 없거나 접근 권한이 없습니다.' 
-                : '채팅방 정보를 불러올 수 없습니다.';
+            let message = '채팅방 정보를 불러올 수 없습니다.';
+            let errorType = 'general';
+            
+            if (error.code === 'PGRST116') {
+                // 채팅방이 존재하지 않거나 접근 권한이 없는 경우
+                // 상대방 탈퇴로 인한 채팅방 삭제 가능성 체크
+                message = '채팅방을 찾을 수 없습니다. 상대방이 탈퇴했거나 채팅방이 삭제되었을 수 있습니다.';
+                errorType = 'room_not_found';
+            }
             
             return res.status(status).json({
                 success: false,
-                error: message
+                error: message,
+                errorType
+            });
+        }
+        
+        // 데이터가 있지만 상대방 프로필이 null인 경우 (탈퇴한 경우) 처리
+        if (data && (data.user === null || data.company === null)) {
+            console.log(`채팅방 ${roomId}: 탈퇴한 사용자가 포함된 채팅방`);
+            
+            // 탈퇴한 사용자 정보를 기본값으로 대체
+            const processedData = {
+                ...data,
+                user: data.user || { name: '탈퇴한 사용자' },
+                company: data.company || { name: '탈퇴한 회사' }
+            };
+            
+            return res.json({
+                success: true,
+                data: processedData,
+                hasWithdrawnUser: true
             });
         }
 
