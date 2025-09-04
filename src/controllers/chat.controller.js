@@ -1,23 +1,5 @@
 const { supabase } = require('../config/database');
 
-// 채팅방 권한 확인 헬퍼 함수
-const validateChatRoomAccess = async (roomId, userId) => {
-    const { data, error } = await supabase
-        .from('chat_rooms')
-        .select('user_id, company_id')
-        .eq('id', roomId)
-        .single();
-    
-    if (error) {
-        return { error: '채팅방을 찾을 수 없습니다.', status: 404 };
-    }
-    
-    if (data.user_id !== userId && data.company_id !== userId) {
-        return { error: '접근 권한이 없습니다.', status: 403 };
-    }
-    
-    return { data };
-};
 
 // 채팅방 목록 가져오기 (구직자용)
 const getUserChatRooms = async (req, res) => {
@@ -137,57 +119,56 @@ const getChatRoomInfo = async (req, res) => {
     }
 };
 
-// 채팅 메시지 목록 가져오기 (페이지네이션 지원)
+// 채팅 메시지 목록 가져오기 (커서 기반 페이지네이션)
 const getChatMessages = async (req, res) => {
     try {
         const { roomId } = req.params;
         const userId = req.user.userId;
         
-        // 쿼리 파라미터 파싱
-        const page = parseInt(req.query.page) || 0;
+        // 쿼리 파라미터 파싱 (커서 기반만 사용)
         const limit = parseInt(req.query.limit) || 20;
         const before = req.query.before; // ISO 시간 문자열
-        const after = req.query.after;   // ISO 시간 문자열
         
         // limit 범위 검증 (1-100)
         const validLimit = Math.max(1, Math.min(100, limit));
         
-        // 헬퍼 함수로 권한 확인
-        const validation = await validateChatRoomAccess(roomId, userId);
-        if (validation.error) {
-            return res.status(validation.status).json({
+        // 권한 확인 및 데이터 조회를 한 번에
+        const { data: roomData, error: roomError } = await supabase
+            .from('chat_rooms')
+            .select('user_id, company_id')
+            .eq('id', roomId)
+            .or(`user_id.eq.${userId},company_id.eq.${userId}`)
+            .single();
+
+        if (roomError || !roomData) {
+            const status = roomError?.code === 'PGRST116' ? 404 : 500;
+            const message = roomError?.code === 'PGRST116' 
+                ? '채팅방을 찾을 수 없거나 접근 권한이 없습니다.' 
+                : '채팅방 접근 확인 중 오류가 발생했습니다.';
+            
+            return res.status(status).json({
                 success: false,
-                error: validation.error
+                error: message
             });
         }
 
+        // 메시지 조회 쿼리 구성
         let query = supabase
             .from('chat_messages')
-            .select('*', { count: 'exact' })
+            .select('*')
             .eq('room_id', roomId);
 
-        // 시간 기반 필터링 (더 정확한 페이지네이션)
+        // 커서 기반 필터링
         if (before) {
             query = query.lt('created_at', before);
         }
-        if (after) {
-            query = query.gt('created_at', after);
-        }
 
-        // 정렬: 최신 메시지부터 (내림차순)
-        query = query.order('created_at', { ascending: false });
+        // 최신 메시지부터 내림차순으로 정렬하고 limit 적용
+        query = query
+            .order('created_at', { ascending: false })
+            .limit(validLimit + 1); // hasMore 판단을 위해 +1
 
-        // 페이지네이션 적용
-        if (!before && !after) {
-            // 기본 페이지네이션 (page 방식)
-            const offset = page * validLimit;
-            query = query.range(offset, offset + validLimit - 1);
-        } else {
-            // 시간 기반 페이지네이션에서도 limit 적용
-            query = query.limit(validLimit);
-        }
-
-        const { data, error, count } = await query;
+        const { data, error } = await query;
 
         if (error) {
             console.error('Error fetching chat messages:', error);
@@ -197,25 +178,21 @@ const getChatMessages = async (req, res) => {
             });
         }
 
-        // 페이지네이션 정보 계산
-        const totalMessages = count || 0;
-        const totalPages = Math.ceil(totalMessages / validLimit);
-        const hasMore = (page + 1) < totalPages;
+        // hasMore 판단 후 실제 데이터는 limit만큼만 반환
+        const hasMore = data && data.length > validLimit;
+        const messages = hasMore ? data.slice(0, validLimit) : (data || []);
         
         // 다음 페이지를 위한 커서 (가장 오래된 메시지의 시간)
-        const nextCursor = data && data.length > 0 
-            ? data[data.length - 1].created_at 
+        const nextCursor = messages.length > 0 
+            ? messages[messages.length - 1].created_at 
             : null;
 
         res.json({
             success: true,
             data: {
-                messages: data || [],
+                messages,
                 pagination: {
-                    page,
                     limit: validLimit,
-                    totalMessages,
-                    totalPages,
                     hasMore,
                     nextCursor
                 }
@@ -230,60 +207,6 @@ const getChatMessages = async (req, res) => {
     }
 };
 
-// 메시지 전송
-const sendMessage = async (req, res) => {
-    try {
-        const { roomId } = req.params;
-        const { message } = req.body;
-        const userId = req.user.userId;
-        
-        if (!message || !message.trim()) {
-            return res.status(400).json({
-                success: false,
-                error: '메시지 내용이 필요합니다.'
-            });
-        }
-
-        // 헬퍼 함수로 권한 확인
-        const validation = await validateChatRoomAccess(roomId, userId);
-        if (validation.error) {
-            return res.status(validation.status).json({
-                success: false,
-                error: validation.error
-            });
-        }
-
-        // 메시지 전송
-        const { data, error } = await supabase
-            .from('chat_messages')
-            .insert({
-                room_id: roomId,
-                sender_id: userId,
-                message: message.trim()
-            })
-            .select('*')
-            .single();
-
-        if (error) {
-            console.error('Error sending message:', error);
-            return res.status(500).json({
-                success: false,
-                error: '메시지 전송에 실패했습니다.'
-            });
-        }
-
-        res.json({
-            success: true,
-            data
-        });
-    } catch (error) {
-        console.error('Error in sendMessage:', error);
-        res.status(500).json({
-            success: false,
-            error: '서버 오류가 발생했습니다.'
-        });
-    }
-};
 
 // 메시지 읽음 처리
 const markMessagesAsRead = async (req, res) => {
@@ -291,43 +214,52 @@ const markMessagesAsRead = async (req, res) => {
         const { roomId } = req.params;
         const userId = req.user.userId;
         
-        // 헬퍼 함수로 권한 확인
-        const validation = await validateChatRoomAccess(roomId, userId);
-        if (validation.error) {
-            return res.status(validation.status).json({
+        // 권한 확인 및 데이터 조회를 한 번에
+        const { data: roomData, error: roomError } = await supabase
+            .from('chat_rooms')
+            .select('user_id, company_id')
+            .eq('id', roomId)
+            .or(`user_id.eq.${userId},company_id.eq.${userId}`)
+            .single();
+
+        if (roomError || !roomData) {
+            const status = roomError?.code === 'PGRST116' ? 404 : 500;
+            const message = roomError?.code === 'PGRST116' 
+                ? '채팅방을 찾을 수 없거나 접근 권한이 없습니다.' 
+                : '채팅방 접근 확인 중 오류가 발생했습니다.';
+            
+            return res.status(status).json({
                 success: false,
-                error: validation.error
+                error: message
             });
         }
 
-        const roomData = validation.data;
-
-        // 메시지 읽음 처리
-        const { error: messageError } = await supabase
-            .from('chat_messages')
-            .update({ is_read: true })
-            .eq('room_id', roomId)
-            .neq('sender_id', userId)
-            .eq('is_read', false);
-
-        if (messageError) {
-            console.error('Error marking messages as read:', messageError);
-        }
-
-        // 채팅방 읽지 않은 메시지 카운트 업데이트
+        // 메시지 읽음 처리와 채팅방 카운트 업데이트를 병렬로 실행
         const isUser = roomData.user_id === userId;
         const updateField = isUser ? 'user_unread_count' : 'company_unread_count';
         
-        const { error: roomUpdateError } = await supabase
-            .from('chat_rooms')
-            .update({ [updateField]: 0 })
-            .eq('id', roomId);
+        const [messageUpdate, roomUpdate] = await Promise.allSettled([
+            supabase
+                .from('chat_messages')
+                .update({ is_read: true })
+                .eq('room_id', roomId)
+                .neq('sender_id', userId)
+                .eq('is_read', false),
+            supabase
+                .from('chat_rooms')
+                .update({ [updateField]: 0 })
+                .eq('id', roomId)
+        ]);
 
-        if (roomUpdateError) {
-            console.error('Error updating room unread count:', roomUpdateError);
+        // 에러 로깅 (실패해도 계속 진행)
+        if (messageUpdate.status === 'rejected') {
+            console.error('Error marking messages as read:', messageUpdate.reason);
+        }
+        if (roomUpdate.status === 'rejected') {
+            console.error('Error updating room unread count:', roomUpdate.reason);
         }
 
-        // WebSocket을 통한 실시간 총 안읽은 메시지 카운트 전송 (있다면)
+        // WebSocket을 통한 실시간 총 안읽은 메시지 카운트 전송
         const io = req.app.get('io');
         if (io && io.chatHandler) {
             await io.chatHandler.sendTotalUnreadCount(userId);
@@ -531,7 +463,6 @@ module.exports = {
     getCompanyChatRooms,
     getChatRoomInfo,
     getChatMessages,
-    sendMessage,
     markMessagesAsRead,
     createChatRoom,
     findExistingRoom,

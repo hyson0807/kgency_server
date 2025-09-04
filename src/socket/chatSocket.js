@@ -73,12 +73,23 @@ class ChatSocketHandler {
         throw new Error('사용자를 찾을 수 없습니다.');
       }
 
+      // 기존 연결이 있으면 정리 (중복 로그인 방지)
+      if (this.authenticatedUsers.has(user.id)) {
+        const oldSocketId = this.authenticatedUsers.get(user.id);
+        const oldSocket = this.io.sockets.sockets.get(oldSocketId);
+        if (oldSocket && oldSocket.id !== socket.id) {
+          console.log(`기존 연결 정리: userId=${user.id}, oldSocketId=${oldSocketId}`);
+          oldSocket.emit('force-disconnect', { reason: '다른 기기에서 로그인됨' });
+          oldSocket.disconnect();
+        }
+      }
+
       // 소켓에 사용자 정보 저장
       socket.userId = user.id;
       socket.userType = user.user_type;
       socket.authenticated = true;
 
-      // 사용자 매핑 저장
+      // 사용자 매핑 저장 (새로운 연결로 업데이트)
       this.authenticatedUsers.set(user.id, socket.id);
 
       console.log(`사용자 인증 성공: ${user.id} (${user.user_type})`, {

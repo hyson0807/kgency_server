@@ -57,6 +57,10 @@ const io = new Server(server, {
 const chatHandler = new ChatSocketHandler(io);
 chatHandler.setupEventHandlers();
 
+// app에서 socket handler에 접근할 수 있도록 설정
+app.set('io', io);
+io.chatHandler = chatHandler;
+
 console.log('🔌 Socket.io 서버가 초기화되었습니다.');
 
 // Graceful shutdown
