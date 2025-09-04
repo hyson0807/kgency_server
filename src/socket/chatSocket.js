@@ -115,7 +115,14 @@ class ChatSocketHandler {
       }
 
       // 권한 확인 (채팅방 참여자만 접근 가능)
-      if (room.user_id !== socket.userId && room.company_id !== socket.userId) {
+      const hasAccess = room.user_id === socket.userId || room.company_id === socket.userId;
+      if (!hasAccess) {
+        console.log('채팅방 접근 권한 확인:', {
+          roomId,
+          socketUserId: socket.userId,
+          roomUserId: room.user_id,
+          roomCompanyId: room.company_id
+        });
         throw new Error('채팅방 접근 권한이 없습니다.');
       }
 
@@ -143,7 +150,7 @@ class ChatSocketHandler {
   }
 
   // 메시지 전송
-  async sendMessage(socket, { roomId, message }) {
+  async sendMessage(socket, { roomId, message, messageType }) {
     if (!socket.authenticated) {
       throw new Error('인증이 필요합니다.');
     }
@@ -164,19 +171,27 @@ class ChatSocketHandler {
         throw new Error('채팅방을 찾을 수 없습니다.');
       }
 
-      if (room.user_id !== socket.userId && room.company_id !== socket.userId) {
+      const hasAccess = room.user_id === socket.userId || room.company_id === socket.userId;
+      if (!hasAccess) {
         throw new Error('메시지 전송 권한이 없습니다.');
       }
 
       // DB에 메시지 저장
+      const messageData = {
+        room_id: roomId,
+        sender_id: socket.userId,
+        message: message.trim(),
+        is_read: false
+      };
+      
+      // messageType이 있으면 추가
+      if (messageType) {
+        messageData.message_type = messageType;
+      }
+      
       const { data: newMessage, error: messageError } = await supabase
         .from('chat_messages')
-        .insert({
-          room_id: roomId,
-          sender_id: socket.userId,
-          message: message.trim(),
-          is_read: false
-        })
+        .insert(messageData)
         .select()
         .single();
 
@@ -186,14 +201,21 @@ class ChatSocketHandler {
       }
 
       // 채팅방의 모든 참여자에게 실시간 브로드캐스트
-      this.io.to(roomId).emit('new-message', {
+      const broadcastMessage = {
         id: newMessage.id,
         room_id: roomId,
         sender_id: socket.userId,
         message: message.trim(),
         created_at: newMessage.created_at,
         is_read: false
-      });
+      };
+      
+      // messageType이 있으면 포함
+      if (messageType) {
+        broadcastMessage.message_type = messageType;
+      }
+      
+      this.io.to(roomId).emit('new-message', broadcastMessage);
 
       // 실시간 업데이트를 위한 채팅방 정보 조회 및 알림 전송
       await this.notifyRoomUpdate(roomId, socket.userId, room);
