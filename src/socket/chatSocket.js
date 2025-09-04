@@ -375,20 +375,17 @@ class ChatSocketHandler {
   // 특정 사용자에게 메시지 전송 (유틸리티 메서드)
   sendToUser(userId, event, data) {
     const socketId = this.authenticatedUsers.get(userId);
-    console.log(`sendToUser 호출: userId=${userId}, event=${event}`, { 
-      socketId, 
-      hasSocket: !!socketId,
-      authenticatedCount: this.authenticatedUsers.size,
-      data 
-    });
     
     if (socketId) {
       this.io.to(socketId).emit(event, data);
-      console.log(`이벤트 전송 완료: ${event} -> ${socketId}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`이벤트 전송 완료: ${event} -> userId:${userId}`);
+      }
       return true;
     } else {
-      console.log(`사용자 ${userId}의 소켓을 찾을 수 없음. 인증된 사용자 목록:`, 
-        Array.from(this.authenticatedUsers.keys()));
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`사용자 ${userId}의 소켓을 찾을 수 없음`);
+      }
     }
     return false;
   }
