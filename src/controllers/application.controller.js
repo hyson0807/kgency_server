@@ -47,13 +47,41 @@ exports.checkDuplicateApplication = async (req, res) => {
 exports.createApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { companyId, jobPostingId, messageId } = req.body;
+        const { companyId, jobPostingId, messageId, useToken } = req.body;
 
         if (!companyId || !jobPostingId || !messageId) {
             return res.status(400).json({
                 success: false,
                 error: 'companyId, jobPostingId, messageId가 필요합니다.'
             });
+        }
+
+        let tokenTransactionId = null;
+
+        // 토큰 사용이 요청된 경우 토큰 차감 (채팅 지원용)
+        if (useToken) {
+            try {
+                const tokenResult = await purchaseService.spendTokens(
+                    userId,
+                    1, // 채팅 지원 1회 = 토큰 1개
+                    '채팅 지원'
+                );
+                tokenTransactionId = tokenResult.transactionId;
+            } catch (tokenError) {
+                console.error('토큰 사용 실패:', tokenError);
+                
+                if (tokenError.message.includes('Insufficient tokens')) {
+                    return res.status(400).json({
+                        success: false,
+                        error: '토큰이 부족합니다. 상점에서 토큰을 구매해주세요.'
+                    });
+                }
+                
+                return res.status(500).json({
+                    success: false,
+                    error: '토큰 처리 중 오류가 발생했습니다.'
+                });
+            }
         }
 
         // 지원 내역 저장
@@ -64,7 +92,10 @@ exports.createApplication = async (req, res) => {
                 company_id: companyId,
                 job_posting_id: jobPostingId,
                 message_id: messageId,
-                status: 'pending'
+                status: 'pending',
+                type: useToken ? 'chat_application' : 'user_initiated',
+                token_used: useToken || false,
+                token_transaction_id: tokenTransactionId
             })
             .select()
             .single();
@@ -116,7 +147,9 @@ exports.createApplication = async (req, res) => {
         res.json({
             success: true,
             data: application,
-            message: '지원서가 성공적으로 제출되었습니다.'
+            message: useToken 
+                ? '채팅 지원이 성공적으로 완료되었습니다. 토큰 1개가 사용되었습니다.'
+                : '지원서가 성공적으로 제출되었습니다.'
         });
 
     } catch (error) {
