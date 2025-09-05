@@ -1,10 +1,12 @@
 const jwt = require('jsonwebtoken');
 const { supabase } = require('../config/database');
+const notificationService = require('../services/notification.service');
 
 class ChatSocketHandler {
   constructor(io) {
     this.io = io;
     this.authenticatedUsers = new Map(); // userId -> socketId 매핑
+    this.userCurrentRoom = new Map(); // userId -> currentRoomId 매핑 (사용자가 현재 있는 채팅방)
   }
 
   // Socket.io 이벤트 핸들러 등록
@@ -144,6 +146,9 @@ class ChatSocketHandler {
       // 소켓을 채팅방에 추가
       socket.join(roomId);
       socket.currentRoomId = roomId;
+      
+      // 사용자의 현재 채팅방 추적
+      this.userCurrentRoom.set(socket.userId, roomId);
 
       console.log(`사용자 ${socket.userId}가 채팅방 ${roomId}에 입장했습니다.`);
       
@@ -260,23 +265,82 @@ class ChatSocketHandler {
 
       // 메시지를 받을 사용자 결정 (발신자가 아닌 사용자)
       const receiverId = senderId === room.user_id ? room.company_id : room.user_id;
+      
+      // receiverId가 없는 경우 (상대방이 탈퇴한 경우 등)
+      if (!receiverId) {
+        console.log('수신자가 없습니다. (탈퇴한 사용자일 수 있음)');
+        return;
+      }
+      
       const receiverUnreadCount = senderId === room.user_id 
         ? updatedRoom.company_unread_count 
         : updatedRoom.user_unread_count;
 
-      // 채팅방 목록 업데이트 이벤트 전송
-      this.sendToUser(receiverId, 'chat-room-updated', {
-        roomId,
-        last_message: updatedRoom.last_message,
-        last_message_at: updatedRoom.last_message_at,
-        unread_count: receiverUnreadCount
-      });
+      // 수신자가 현재 해당 채팅방에 있는지 확인
+      const receiverCurrentRoom = this.userCurrentRoom.get(receiverId);
+      const isReceiverInRoom = receiverCurrentRoom === roomId;
+      
+      // 수신자가 온라인이지만 다른 채팅방에 있거나 채팅방 밖에 있을 때
+      const isReceiverOnline = this.authenticatedUsers.has(receiverId);
 
-      // 전체 안읽은 메시지 카운트 조회 및 전송
-      await this.sendTotalUnreadCount(receiverId);
+      // 채팅방 목록 업데이트 이벤트 전송 (온라인인 경우)
+      if (isReceiverOnline) {
+        this.sendToUser(receiverId, 'chat-room-updated', {
+          roomId,
+          last_message: updatedRoom.last_message,
+          last_message_at: updatedRoom.last_message_at,
+          unread_count: receiverUnreadCount
+        });
+      }
+
+      // 전체 안읽은 메시지 카운트 조회 및 전송 (온라인인 경우)
+      if (isReceiverOnline) {
+        await this.sendTotalUnreadCount(receiverId);
+      }
+
+      // 수신자가 채팅방에 없을 때 푸시 알림 전송
+      if (!isReceiverInRoom) {
+        await this.sendChatPushNotification(senderId, receiverId, updatedRoom.last_message, roomId);
+      }
 
     } catch (error) {
       console.error('채팅방 업데이트 알림 실패:', error);
+    }
+  }
+
+  // 채팅 푸시 알림 전송
+  async sendChatPushNotification(senderId, receiverId, messageContent, roomId) {
+    try {
+      // 발신자 정보 조회
+      const { data: sender, error: senderError } = await supabase
+        .from('profiles')
+        .select('name')
+        .eq('id', senderId)
+        .single();
+
+      if (senderError) {
+        console.error('발신자 정보 조회 실패:', senderError);
+        return;
+      }
+
+      const senderName = sender?.name || '알 수 없는 사용자';
+      
+      // 푸시 알림 전송
+      const notificationSent = await notificationService.sendChatMessageNotification(
+        receiverId,
+        senderName,
+        messageContent,
+        roomId
+      );
+
+      if (notificationSent) {
+        console.log(`채팅 푸시 알림 전송 완료: ${senderName} -> ${receiverId}`);
+      } else {
+        console.log(`채팅 푸시 알림 전송 실패: ${receiverId}의 푸시 토큰이 없음`);
+      }
+
+    } catch (error) {
+      console.error('채팅 푸시 알림 전송 중 오류:', error);
     }
   }
 
@@ -353,6 +417,11 @@ class ChatSocketHandler {
     socket.leave(roomId);
     socket.currentRoomId = null;
     
+    // 사용자의 현재 채팅방 정보 제거
+    if (socket.userId) {
+      this.userCurrentRoom.delete(socket.userId);
+    }
+    
     console.log(`사용자 ${socket.userId}가 채팅방 ${roomId}에서 퇴장했습니다.`);
     
     // 채팅방의 다른 참여자에게 알림 (선택사항)
@@ -366,6 +435,7 @@ class ChatSocketHandler {
   handleDisconnect(socket) {
     if (socket.userId) {
       this.authenticatedUsers.delete(socket.userId);
+      this.userCurrentRoom.delete(socket.userId); // 현재 채팅방 정보도 제거
       console.log(`사용자 ${socket.userId} 연결 해제`);
     } else {
       console.log(`클라이언트 ${socket.id} 연결 해제`);

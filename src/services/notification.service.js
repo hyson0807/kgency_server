@@ -268,6 +268,29 @@ class NotificationService {
   }
 
   /**
+   * Send chat message notification to user
+   * @param {string} userId - User ID who will receive the notification
+   * @param {string} senderName - Name of the message sender
+   * @param {string} messageContent - Content of the message (truncated for privacy)
+   * @param {string} roomId - Chat room ID for navigation
+   */
+  async sendChatMessageNotification(userId, senderName, messageContent, roomId) {
+    const title = senderName || '새 메시지';
+    // Truncate message for privacy and notification size limit
+    const truncatedMessage = messageContent.length > 100 
+      ? messageContent.substring(0, 97) + '...' 
+      : messageContent;
+    const body = truncatedMessage;
+    const data = {
+      type: 'chat_message',
+      roomId,
+      senderName,
+    };
+
+    return await this.sendToUser(userId, title, body, data);
+  }
+
+  /**
    * Core notification sending logic
    * @param {string} pushToken - Expo push token
    * @param {string} title - Notification title
