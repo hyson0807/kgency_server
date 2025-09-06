@@ -442,8 +442,8 @@ const findExistingRoom = async (req, res) => {
             });
         }
         
-        // 권한 검증 (요청자가 해당 사용자 본인인지 확인)
-        if (currentUserId !== user_id) {
+        // 권한 검증 (요청자가 해당 사용자 본인이거나 해당 회사인지 확인)
+        if (currentUserId !== user_id && currentUserId !== company_id) {
             return res.status(403).json({
                 success: false,
                 error: '접근 권한이 없습니다.'
