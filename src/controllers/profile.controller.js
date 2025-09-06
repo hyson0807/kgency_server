@@ -191,7 +191,7 @@ const getUserProfile = async (req, res) => {
 
         const { data: profileData, error } = await supabase
             .from('profiles')
-            .select('id, name, user_type')
+            .select('id, name, user_type, profile_image_url')
             .eq('id', userId)
             .single();
 
