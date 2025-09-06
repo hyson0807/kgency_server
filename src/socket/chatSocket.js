@@ -1,12 +1,14 @@
 const jwt = require('jsonwebtoken');
 const { supabase } = require('../config/database');
 const notificationService = require('../services/notification.service');
+const UnreadCountManager = require('../services/UnreadCountManager');
 
 class ChatSocketHandler {
   constructor(io) {
     this.io = io;
     this.authenticatedUsers = new Map(); // userId -> socketId 매핑
     this.userCurrentRoom = new Map(); // userId -> currentRoomId 매핑 (사용자가 현재 있는 채팅방)
+    this.unreadCountManager = new UnreadCountManager(); // Redis 기반 카운트 관리자
   }
 
   // Socket.io 이벤트 핸들러 등록
@@ -237,6 +239,13 @@ class ChatSocketHandler {
       
       this.io.to(roomId).emit('new-message', broadcastMessage);
 
+      // 수신자의 Redis 카운트 즉시 업데이트 (성능 최적화)
+      const receiverId = socket.userId === room.user_id ? room.company_id : room.user_id;
+      if (receiverId) {
+        // Redis에서 즉시 카운트 증가 (0.1초 이내)
+        await this.unreadCountManager.incrementUnreadCount(receiverId, roomId, 1);
+      }
+
       // 실시간 업데이트를 위한 채팅방 정보 조회 및 알림 전송
       await this.notifyRoomUpdate(roomId, socket.userId, room);
 
@@ -293,9 +302,9 @@ class ChatSocketHandler {
         });
       }
 
-      // 전체 안읽은 메시지 카운트 조회 및 전송 (온라인인 경우)
+      // 전체 안읽은 메시지 카운트 조회 및 전송 (온라인인 경우) - Redis 기반 최적화
       if (isReceiverOnline) {
-        await this.sendTotalUnreadCount(receiverId);
+        await this.sendTotalUnreadCountWithRedis(receiverId);
       }
 
       // 수신자가 채팅방에 없을 때 푸시 알림 전송
@@ -345,8 +354,33 @@ class ChatSocketHandler {
   }
 
 
-  // 총 안읽은 메시지 카운트 전송
-  async sendTotalUnreadCount(userId) {
+  // Redis 기반 총 안읽은 메시지 카운트 전송 (성능 최적화)
+  async sendTotalUnreadCountWithRedis(userId) {
+    try {
+      // Redis에서 캐시된 카운트 조회 (0.1초 이내)
+      let totalUnreadCount = await this.unreadCountManager.getCachedTotalUnreadCount(userId);
+      
+      // Redis에 데이터가 없으면 DB에서 동기화 후 캐시
+      if (totalUnreadCount === 0) {
+        totalUnreadCount = await this.unreadCountManager.syncFromDatabase(userId);
+      }
+
+      // 즉시 배지 업데이트 전송
+      this.sendToUser(userId, 'total-unread-count-updated', {
+        totalUnreadCount
+      });
+
+      console.log(`✅ Redis 배지 업데이트 전송: ${userId} → ${totalUnreadCount}`);
+
+    } catch (error) {
+      console.error('Redis 배지 업데이트 실패:', error);
+      // Fallback: 기존 DB 방식
+      await this.sendTotalUnreadCountFallback(userId);
+    }
+  }
+
+  // 기존 DB 기반 총 안읽은 메시지 카운트 전송 (Fallback)
+  async sendTotalUnreadCountFallback(userId) {
     try {
       const { data: rooms, error } = await supabase
         .from('chat_rooms')
@@ -374,15 +408,22 @@ class ChatSocketHandler {
         totalUnreadCount
       });
 
+      console.log(`⚠️ Fallback 배지 업데이트 전송: ${userId} → ${totalUnreadCount}`);
+
     } catch (error) {
-      console.error('총 안읽은 메시지 카운트 전송 실패:', error);
+      console.error('Fallback 배지 업데이트 실패:', error);
     }
   }
 
-  // 채팅방 입장 시 읽지 않은 메시지 카운트 리셋
+  // 기존 메서드 유지 (하위 호환성)
+  async sendTotalUnreadCount(userId) {
+    return await this.sendTotalUnreadCountWithRedis(userId);
+  }
+
+  // 채팅방 입장 시 읽지 않은 메시지 카운트 리셋 (Redis 최적화)
   async resetUnreadCountOnJoin(roomId, userId, room) {
     try {
-      // 현재 사용자의 읽지 않은 메시지 카운트를 0으로 리셋
+      // 1. DB에서 카운트 리셋 (기존 방식 유지)
       const isUser = room.user_id === userId;
       const updateField = isUser ? 'user_unread_count' : 'company_unread_count';
       
@@ -396,7 +437,7 @@ class ChatSocketHandler {
         return;
       }
 
-      // 채팅방의 모든 메시지를 읽음 처리
+      // 2. 채팅방의 모든 메시지를 읽음 처리
       await supabase
         .from('chat_messages')
         .update({ is_read: true })
@@ -404,11 +445,20 @@ class ChatSocketHandler {
         .neq('sender_id', userId)
         .eq('is_read', false);
 
-      // 총 안읽은 메시지 카운트 업데이트 전송
-      await this.sendTotalUnreadCount(userId);
+      // 3. Redis 캐시에서도 해당 룸의 카운트 리셋 (즉시 반영)
+      const totalUnreadCount = await this.unreadCountManager.resetRoomUnreadCount(userId, roomId);
+
+      // 4. 즉시 배지 업데이트 전송
+      this.sendToUser(userId, 'total-unread-count-updated', {
+        totalUnreadCount
+      });
+
+      console.log(`🚪 채팅방 입장 배지 리셋: ${userId} → 룸 ${roomId} → 총 ${totalUnreadCount}`);
 
     } catch (error) {
-      console.error('채팅방 입장 시 읽지 않은 메시지 카운트 리셋 실패:', error);
+      console.error('채팅방 입장 시 배지 리셋 실패:', error);
+      // Fallback: 기존 방식으로 재시도
+      await this.sendTotalUnreadCountFallback(userId);
     }
   }
 
