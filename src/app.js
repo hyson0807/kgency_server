@@ -29,8 +29,6 @@ app.get('/', (req, res) => {
             auth: '/api/auth/*',
             ai: '/api/ai/*',
             translate: '/api/translate/*',
-            interviewSlots: '/api/company/interview-slots/*',
-            interviews: '/api/interview-proposals/*',
         }
     });
 });

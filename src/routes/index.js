@@ -5,9 +5,6 @@ const router = express.Router();
 const authRoutes = require('./auth.routes');
 const aiRoutes = require('./ai.routes');
 const translateRoutes = require('./translate.routes');
-const interviewSlotRoutes = require('./interviewSlot.routes');
-const interviewRoutes = require('./interview.routes');
-const interviewScheduleRoutes = require('./interviewSchedule.routes');
 const applicationRoutes = require('./application.routes');
 const userKeywordRoutes = require('./userKeyword.routes');
 const companyKeywordRoutes = require('./companyKeyword.routes');
@@ -53,10 +50,6 @@ router.use('/users', userRoutes);
 router.use('/messages', messageRoutes);
 
 router.use('/job-seekers', jobSeekerRoutes);
-
-router.use('/company/interview-slots', interviewSlotRoutes);
-router.use('/interview-proposals', interviewRoutes);
-router.use('/interview-schedules', interviewScheduleRoutes);
 
 router.use('/purchase', purchaseRoutes);
 
