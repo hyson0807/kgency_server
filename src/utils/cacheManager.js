@@ -16,13 +16,22 @@ class CacheManager {
 
   async initRedis() {
     try {
-      // Railway 환경 감지
-      const isRailway = process.env.RAILWAY_STATIC_URL || process.env.RAILWAY_GIT_COMMIT_SHA;
-      const redisUrl = process.env.REDIS_URL || (isRailway ? null : 'redis://localhost:6379');
+      // 개발 환경과 프로덕션 환경 모두 Redis Cloud 사용
+      const isDevelopment = process.env.NODE_ENV === 'development';
+      const isRender = process.env.RENDER || process.env.RENDER_SERVICE_ID;
+      const redisUrl = process.env.REDIS_URL;
       
-      // Railway에서 Redis가 설정되지 않은 경우 메모리 캐시만 사용
+      if (isDevelopment) {
+        console.log('🔧 개발 환경: Redis Cloud 사용');
+      } else if (isRender) {
+        console.log('🚀 Render 프로덕션 환경: Redis Cloud 사용');
+      } else {
+        console.log('🌐 기타 환경: Redis Cloud 사용');
+      }
+      
+      // Redis URL이 없는 경우 메모리 캐시만 사용
       if (!redisUrl) {
-        console.log('🚀 Railway 환경에서 Redis URL이 없음. 메모리 캐시만 사용합니다.');
+        console.log('⚠️ Redis URL이 없음. 메모리 캐시만 사용합니다.');
         this.isRedisConnected = false;
         return;
       }
