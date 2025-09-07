@@ -499,7 +499,7 @@ class PurchaseService {
       if (purchaseError) throw purchaseError;
 
       // 4. 토큰 20개 지급
-      await this.addTokensToUser(userId, 20, purchase.id, 'yatra_package_1');
+      await this.addTokensToUser(userId, 10, purchase.id, 'yatra_package_1');
 
       // 5. 관리자에게 SMS 알림 (실패해도 구매는 성공으로 처리)
       try {
@@ -512,7 +512,7 @@ class PurchaseService {
       return {
         success: true,
         purchase: purchase,
-        tokensAdded: 20
+        tokensAdded: 10
       };
 
     } catch (error) {

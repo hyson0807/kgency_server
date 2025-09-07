@@ -278,7 +278,7 @@ class PurchaseController {
         console.warn('SMS notification failed but purchase was successful');
         return res.json({
           success: true,
-          tokensAdded: 20,
+          tokensAdded: 10,
           message: 'Yatra package purchase completed successfully'
         });
       }
