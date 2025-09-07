@@ -239,11 +239,21 @@ class ChatSocketHandler {
       
       this.io.to(roomId).emit('new-message', broadcastMessage);
 
-      // 수신자의 Redis 카운트 즉시 업데이트 (성능 최적화)
+      // 수신자의 Redis 카운트 업데이트 - 채팅방 내 사용자는 카운트 증가 방지
       const receiverId = socket.userId === room.user_id ? room.company_id : room.user_id;
       if (receiverId) {
-        // Redis에서 즉시 카운트 증가 (0.1초 이내)
-        await this.unreadCountManager.incrementUnreadCount(receiverId, roomId, 1);
+        // 수신자가 현재 채팅방에 있는지 확인
+        const isReceiverInRoom = this.userCurrentRoom.get(receiverId) === roomId;
+        
+        if (!isReceiverInRoom) {
+          // 채팅방 밖에 있을 때만 카운트 증가
+          await this.unreadCountManager.incrementUnreadCount(receiverId, roomId, 1);
+          console.log(`카운트 증가: 수신자 ${receiverId}가 채팅방 밖에 있음`);
+        } else {
+          // 채팅방 안에 있으면 즉시 읽음 처리
+          await this.markMessagesAsReadInRoom(roomId, receiverId);
+          console.log(`즉시 읽음 처리: 수신자 ${receiverId}가 채팅방 ${roomId} 안에 있음`);
+        }
       }
 
       // 실시간 업데이트를 위한 채팅방 정보 조회 및 알림 전송
@@ -294,12 +304,17 @@ class ChatSocketHandler {
 
       // 채팅방 목록 업데이트 이벤트 전송 (온라인인 경우)
       if (isReceiverOnline) {
+        // 수신자가 채팅방에 있으면 unread_count는 0으로 전송
+        const actualUnreadCount = isReceiverInRoom ? 0 : receiverUnreadCount;
+        
         this.sendToUser(receiverId, 'chat-room-updated', {
           roomId,
           last_message: updatedRoom.last_message,
           last_message_at: updatedRoom.last_message_at,
-          unread_count: receiverUnreadCount
+          unread_count: actualUnreadCount
         });
+        
+        console.log(`채팅방 업데이트 전송: receiverId=${receiverId}, inRoom=${isReceiverInRoom}, unreadCount=${actualUnreadCount}`);
       }
 
       // 전체 안읽은 메시지 카운트 조회 및 전송 (온라인인 경우) - Redis 기반 최적화
@@ -489,6 +504,58 @@ class ChatSocketHandler {
       console.log(`사용자 ${socket.userId} 연결 해제`);
     } else {
       console.log(`클라이언트 ${socket.id} 연결 해제`);
+    }
+  }
+
+  // 채팅방 내 사용자의 메시지를 즉시 읽음 처리
+  async markMessagesAsReadInRoom(roomId, userId) {
+    try {
+      // 1. 해당 채팅방의 읽지 않은 메시지를 읽음으로 처리
+      const { error: messageError } = await supabase
+        .from('chat_messages')
+        .update({ is_read: true })
+        .eq('room_id', roomId)
+        .neq('sender_id', userId) // 자신이 보낸 메시지는 제외
+        .eq('is_read', false);
+
+      if (messageError) {
+        console.error('메시지 읽음 처리 실패:', messageError);
+        return false;
+      }
+
+      // 2. 채팅방 테이블의 읽지 않은 카운트 리셋
+      const { data: room } = await supabase
+        .from('chat_rooms')
+        .select('user_id, company_id')
+        .eq('id', roomId)
+        .single();
+
+      if (room) {
+        const isUser = room.user_id === userId;
+        const updateField = isUser ? 'user_unread_count' : 'company_unread_count';
+        
+        const { error: countError } = await supabase
+          .from('chat_rooms')
+          .update({ [updateField]: 0 })
+          .eq('id', roomId);
+
+        if (countError) {
+          console.error('채팅방 카운트 리셋 실패:', countError);
+        }
+      }
+
+      // 3. Redis 카운트도 리셋
+      await this.unreadCountManager.resetUnreadCount(userId, roomId);
+
+      // 4. 전체 안읽은 메시지 카운트 업데이트 전송
+      await this.sendTotalUnreadCountWithRedis(userId);
+
+      console.log(`즉시 읽음 처리 완료: userId=${userId}, roomId=${roomId}`);
+      return true;
+
+    } catch (error) {
+      console.error('즉시 읽음 처리 오류:', error);
+      return false;
     }
   }
 

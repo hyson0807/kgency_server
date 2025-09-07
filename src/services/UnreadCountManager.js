@@ -245,6 +245,13 @@ class UnreadCountManager {
     }
 
     /**
+     * 특정 채팅방의 읽지 않은 카운트 리셋 (alias for resetRoomUnreadCount)
+     */
+    async resetUnreadCount(userId, roomId) {
+        return await this.resetRoomUnreadCount(userId, roomId);
+    }
+
+    /**
      * 사용자의 모든 읽지 않은 카운트 데이터 삭제 (로그아웃 시)
      */
     async clearUserUnreadCounts(userId) {
