@@ -37,7 +37,7 @@ const server = app.listen(port, () => {
     `);
 });
 
-// Socket.io 설정
+// Socket.io 설정 - Railway 최적화
 const io = new Server(server, {
     cors: {
         origin: process.env.NODE_ENV === 'production' 
@@ -48,9 +48,17 @@ const io = new Server(server, {
         methods: ["GET", "POST"],
         credentials: true
     },
+    // Railway 환경에서 WebSocket 최적화
     transports: ['websocket', 'polling'],
+    allowEIO3: true,
     pingTimeout: 60000,
-    pingInterval: 25000
+    pingInterval: 25000,
+    // Railway 프록시 환경 대응
+    path: '/socket.io/',
+    serveClient: false,
+    // WebSocket 연결 강제 (Railway 테스트용)
+    allowUpgrades: true,
+    perMessageDeflate: false
 });
 
 // 채팅 Socket 핸들러 초기화
