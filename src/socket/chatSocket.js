@@ -332,7 +332,7 @@ class ChatSocketHandler {
     }
   }
 
-  // 채팅 푸시 알림 전송
+  // 채팅 푸시 알림 전송 (중복 카운트 방지 로직 포함)
   async sendChatPushNotification(senderId, receiverId, messageContent, roomId) {
     try {
       // 발신자 정보 조회
@@ -349,12 +349,22 @@ class ChatSocketHandler {
 
       const senderName = sender?.name || '알 수 없는 사용자';
       
-      // 푸시 알림 전송
+      // 🔧 현재 총 안읽은 메시지 카운트 조회 (Redis에서)
+      let totalUnreadCount = 1; // 기본값: 적어도 1개는 있다고 가정
+      try {
+        totalUnreadCount = await this.unreadCountManager.getTotalUnreadCount(receiverId);
+        console.log(`푸시 알림 배지 카운트 조회: receiverId=${receiverId}, count=${totalUnreadCount}`);
+      } catch (error) {
+        console.error('Redis에서 안읽은 카운트 조회 실패, 기본값 사용:', error);
+      }
+      
+      // 푸시 알림 전송 (배지 카운트 포함)
       const notificationSent = await notificationService.sendChatMessageNotification(
         receiverId,
         senderName,
         messageContent,
-        roomId
+        roomId,
+        totalUnreadCount // 🔧 배지 카운트 전달
       );
 
       if (notificationSent) {

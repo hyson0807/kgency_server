@@ -268,26 +268,75 @@ class NotificationService {
   }
 
   /**
-   * Send chat message notification to user
+   * Send chat message notification to user with badge count
    * @param {string} userId - User ID who will receive the notification
    * @param {string} senderName - Name of the message sender
    * @param {string} messageContent - Content of the message (truncated for privacy)
    * @param {string} roomId - Chat room ID for navigation
+   * @param {number} totalUnreadCount - Total unread message count for badge
    */
-  async sendChatMessageNotification(userId, senderName, messageContent, roomId) {
-    const title = senderName || '새 메시지';
-    // Truncate message for privacy and notification size limit
-    const truncatedMessage = messageContent.length > 100 
-      ? messageContent.substring(0, 97) + '...' 
-      : messageContent;
-    const body = truncatedMessage;
-    const data = {
-      type: 'chat_message',
-      roomId,
-      senderName,
-    };
+  async sendChatMessageNotification(userId, senderName, messageContent, roomId, totalUnreadCount = null) {
+    try {
+      const title = senderName || '새 메시지';
+      // Truncate message for privacy and notification size limit
+      const truncatedMessage = messageContent.length > 100 
+        ? messageContent.substring(0, 97) + '...' 
+        : messageContent;
+      const body = truncatedMessage;
+      const data = {
+        type: 'chat_message',
+        roomId,
+        senderName,
+      };
 
-    return await this.sendToUser(userId, title, body, data);
+      // Get badge count if not provided
+      let badgeCount = totalUnreadCount;
+      if (badgeCount === null) {
+        try {
+          const UnreadCountManager = require('./UnreadCountManager');
+          const unreadCountManager = new UnreadCountManager();
+          badgeCount = await unreadCountManager.getTotalUnreadCount(userId);
+        } catch (error) {
+          console.error('Error getting unread count for badge:', error);
+          badgeCount = 1; // Fallback to 1 to show there's at least one unread message
+        }
+      }
+
+      return await this.sendToUserWithBadge(userId, title, body, data, badgeCount);
+    } catch (error) {
+      console.error('Error sending chat message notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send push notification to a user with badge count
+   * @param {string} userId - User ID to send notification to
+   * @param {string} title - Notification title
+   * @param {string} body - Notification body
+   * @param {object} data - Additional data to send with notification
+   * @param {number} badgeCount - Badge count for app icon
+   */
+  async sendToUserWithBadge(userId, title, body, data = {}, badgeCount = 0) {
+    try {
+      // Get user's push token from database
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('push_token')
+        .eq('id', userId)
+        .single();
+
+      if (error || !profile?.push_token) {
+        console.log(`No push token found for user ${userId}`);
+        return false;
+      }
+
+      // Send notification with badge
+      return await this.sendNotificationWithBadge(profile.push_token, title, body, data, badgeCount);
+    } catch (error) {
+      console.error('Error sending notification with badge to user:', error);
+      return false;
+    }
   }
 
   /**
@@ -332,6 +381,55 @@ class NotificationService {
       return true;
     } catch (error) {
       console.error('Error sending notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Core notification sending logic with badge count
+   * @param {string} pushToken - Expo push token
+   * @param {string} title - Notification title
+   * @param {string} body - Notification body
+   * @param {object} data - Additional data
+   * @param {number} badgeCount - Badge count for app icon
+   */
+  async sendNotificationWithBadge(pushToken, title, body, data = {}, badgeCount = 0) {
+    // Check that push token is valid
+    if (!Expo.isExpoPushToken(pushToken)) {
+      console.error(`Push token ${pushToken} is not a valid Expo push token`);
+      return false;
+    }
+
+    try {
+      const message = {
+        to: pushToken,
+        sound: 'default',
+        title,
+        body,
+        data,
+        badge: badgeCount, // 🔧 배지 카운트 추가
+        priority: 'high',
+      };
+
+      const chunks = expo.chunkPushNotifications([message]);
+      const tickets = [];
+
+      for (const chunk of chunks) {
+        try {
+          const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
+          tickets.push(...ticketChunk);
+        } catch (error) {
+          console.error('Error sending notification chunk:', error);
+        }
+      }
+
+      // Check receipts after a delay
+      setTimeout(() => this.checkReceipts(tickets), 5000);
+
+      console.log(`푸시 알림 전송 완료 - 배지 카운트: ${badgeCount}`);
+      return true;
+    } catch (error) {
+      console.error('Error sending notification with badge:', error);
       return false;
     }
   }
