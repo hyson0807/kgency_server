@@ -1,7 +1,8 @@
 const { supabase } = require('../config');
 const translateService = require('./translate.service');
 
-const generateResumeForPosting = async (data) => {
+// AI 이력서 생성
+const generateResume = async (data) => {
     const { user_id, job_posting_id, company_id, question, workDaysString, workTimesString } = data;
 
     // 1. 유저 프로필 정보
@@ -126,6 +127,32 @@ const generateResumeForPosting = async (data) => {
     };
 };
 
+// 이력서 저장 (메시지로 저장)
+const saveResume = async (senderId, receiverId, subject, content) => {
+    if (!receiverId || !subject || !content) {
+        throw new Error('receiverId, subject, content가 필요합니다.');
+    }
+
+    // 메시지 저장
+    const { data: message, error } = await supabase
+        .from('messages')
+        .insert({
+            sender_id: senderId,
+            receiver_id: receiverId,
+            subject: subject,
+            content: content
+        })
+        .select()
+        .single();
+
+    if (error) {
+        throw error;
+    }
+
+    return message;
+};
+
 module.exports = {
-    generateResumeForPosting
+    generateResume,
+    saveResume
 };

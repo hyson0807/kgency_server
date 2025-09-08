@@ -1,7 +1,7 @@
-const aiService = require('../services/ai.service');
+const resumeService = require('../services/resume.service');
 
-// 이력서 생성
-const generateResumeForPosting = async (req, res) => {
+// AI 이력서 생성
+const generateResume = async (req, res) => {
     try {
         const {
             user_id,
@@ -20,7 +20,7 @@ const generateResumeForPosting = async (req, res) => {
             });
         }
 
-        const result = await aiService.generateResumeForPosting({
+        const result = await resumeService.generateResume({
             user_id,
             job_posting_id,
             company_id,
@@ -52,6 +52,38 @@ const generateResumeForPosting = async (req, res) => {
     }
 };
 
+// 이력서 저장 (메시지로 저장)
+const saveResume = async (req, res) => {
+    try {
+        const senderId = req.user.userId;
+        const { receiverId, subject, content } = req.body;
+
+        const message = await resumeService.saveResume(senderId, receiverId, subject, content);
+
+        res.json({
+            success: true,
+            data: message,
+            message: '이력서가 성공적으로 저장되었습니다.'
+        });
+
+    } catch (error) {
+        console.error('이력서 저장 실패:', error);
+        
+        if (error.message === 'receiverId, subject, content가 필요합니다.') {
+            res.status(400).json({
+                success: false,
+                error: error.message
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: '이력서 저장에 실패했습니다.'
+            });
+        }
+    }
+};
+
 module.exports = {
-    generateResumeForPosting
+    generateResume,
+    saveResume
 };

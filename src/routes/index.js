@@ -1,7 +1,5 @@
 const express = require('express');
 const router = express.Router();
-
-// 라우트 파일들 가져오기
 const authRoutes = require('./auth.routes');
 const aiRoutes = require('./ai.routes');
 const translateRoutes = require('./translate.routes');
@@ -12,27 +10,19 @@ const jobPostingRoutes = require('./jobPostingRoutes');
 const jobPostingKeywordRoutes = require('./jobPostingKeyword.routes');
 const profileRoutes = require('./profile.routes');
 const messageRoutes = require('./message.routes');
+const resumeRoutes = require('./resume.routes');
 const userRoutes = require('./user.routes');
 const jobSeekerRoutes = require('./jobSeeker.routes');
 const purchaseRoutes = require('./purchase.routes');
-const appInitRoutes = require('./appInit.routes'); // 추가
+const appInitRoutes = require('./appInit.routes');
 const chatRoutes = require('./chat.routes');
 const healthController = require('../controllers/health.controller');
 
-
-// 디버깅용 미들웨어
-router.use((req, res, next) => {
-    console.log('api hit:', req.method, req.path);
-    next();
-});
-
-// 헬스 체크 (메인 라우터에 직접 연결)123
+// 헬스 체크
 router.get('/health', healthController.healthCheck);
 
-
-// 각 도메인별 라우트 연결
 router.use('/auth', authRoutes);
-router.use('/ai', aiRoutes);
+
 router.use('/translate', translateRoutes);
 
 router.use('/user-keyword', userKeywordRoutes);
@@ -47,7 +37,10 @@ router.use('/profiles', profileRoutes);
 
 router.use('/users', userRoutes);
 
-router.use('/messages', messageRoutes);
+
+
+// 이력서 전송, 저장
+router.use('/resume', resumeRoutes);
 
 router.use('/job-seekers', jobSeekerRoutes);
 
