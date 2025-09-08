@@ -1,45 +1,20 @@
-const { supabase } = require('../config/database');
-
+const chatService = require('../services/chat.service');
 
 // 채팅방 목록 가져오기 (구직자용)
 const getUserChatRooms = async (req, res) => {
     try {
         const userId = req.user.userId;
+        const data = await chatService.getUserChatRooms(userId);
         
-        const { data, error } = await supabase
-            .from('chat_rooms')
-            .select(`
-                *,
-                company:profiles!company_id(name),
-                job_postings(title)
-            `)
-            .eq('user_id', userId)
-            .eq('is_active', true)
-            .order('last_message_at', { ascending: false, nullsFirst: false });
-
-        if (error) {
-            console.error('Error fetching user chat rooms:', error);
-            return res.status(500).json({
-                success: false,
-                error: '채팅방을 불러오는데 실패했습니다.'
-            });
-        }
-
-        // 탈퇴한 사용자가 포함된 채팅방 처리
-        const processedData = (data || []).map(room => ({
-            ...room,
-            company: room.company || { name: '탈퇴한 회사' }
-        }));
-
         res.json({
             success: true,
-            data: processedData
+            data
         });
     } catch (error) {
         console.error('Error in getUserChatRooms:', error);
         res.status(500).json({
             success: false,
-            error: '서버 오류가 발생했습니다.'
+            error: '채팅방을 불러오는데 실패했습니다.'
         });
     }
 };
@@ -48,41 +23,17 @@ const getUserChatRooms = async (req, res) => {
 const getCompanyChatRooms = async (req, res) => {
     try {
         const companyId = req.user.userId;
+        const data = await chatService.getCompanyChatRooms(companyId);
         
-        const { data, error } = await supabase
-            .from('chat_rooms')
-            .select(`
-                *,
-                user:profiles!user_id(name),
-                job_postings(title)
-            `)
-            .eq('company_id', companyId)
-            .eq('is_active', true)
-            .order('last_message_at', { ascending: false, nullsFirst: false });
-
-        if (error) {
-            console.error('Error fetching company chat rooms:', error);
-            return res.status(500).json({
-                success: false,
-                error: '채팅방을 불러오는데 실패했습니다.'
-            });
-        }
-
-        // 탈퇴한 사용자가 포함된 채팅방 처리
-        const processedData = (data || []).map(room => ({
-            ...room,
-            user: room.user || { name: '탈퇴한 사용자' }
-        }));
-
         res.json({
             success: true,
-            data: processedData
+            data
         });
     } catch (error) {
         console.error('Error in getCompanyChatRooms:', error);
         res.status(500).json({
             success: false,
-            error: '서버 오류가 발생했습니다.'
+            error: '채팅방을 불러오는데 실패했습니다.'
         });
     }
 };
@@ -93,65 +44,33 @@ const getChatRoomInfo = async (req, res) => {
         const { roomId } = req.params;
         const userId = req.user.userId;
         
-        // 권한 확인 및 데이터 조회를 한 번에
-        const { data, error } = await supabase
-            .from('chat_rooms')
-            .select(`
-                *,
-                user:profiles!user_id(name),
-                company:profiles!company_id(name),
-                job_postings(title)
-            `)
-            .eq('id', roomId)
-            .or(`user_id.eq.${userId},company_id.eq.${userId}`)
-            .single();
-
-        if (error) {
-            const status = error.code === 'PGRST116' ? 404 : 500;
-            let message = '채팅방 정보를 불러올 수 없습니다.';
-            let errorType = 'general';
-            
-            if (error.code === 'PGRST116') {
-                // 채팅방이 존재하지 않거나 접근 권한이 없는 경우
-                // 상대방 탈퇴로 인한 채팅방 삭제 가능성 체크
-                message = '채팅방을 찾을 수 없습니다. 상대방이 탈퇴했거나 채팅방이 삭제되었을 수 있습니다.';
-                errorType = 'room_not_found';
-            }
-            
-            return res.status(status).json({
+        const data = await chatService.getChatRoomInfo(roomId, userId);
+        
+        const response = {
+            success: true,
+            data
+        };
+        
+        if (data.hasWithdrawnUser) {
+            response.hasWithdrawnUser = true;
+        }
+        
+        res.json(response);
+    } catch (error) {
+        console.error('Error in getChatRoomInfo:', error);
+        
+        if (error.code === 'ROOM_NOT_FOUND') {
+            return res.status(404).json({
                 success: false,
-                error: message,
-                errorType
+                error: error.message,
+                errorType: 'room_not_found'
             });
         }
         
-        // 데이터가 있지만 상대방 프로필이 null인 경우 (탈퇴한 경우) 처리
-        if (data && (data.user === null || data.company === null)) {
-            console.log(`채팅방 ${roomId}: 탈퇴한 사용자가 포함된 채팅방`);
-            
-            // 탈퇴한 사용자 정보를 기본값으로 대체
-            const processedData = {
-                ...data,
-                user: data.user || { name: '탈퇴한 사용자' },
-                company: data.company || { name: '탈퇴한 회사' }
-            };
-            
-            return res.json({
-                success: true,
-                data: processedData,
-                hasWithdrawnUser: true
-            });
-        }
-
-        res.json({
-            success: true,
-            data
-        });
-    } catch (error) {
-        console.error('Error in getChatRoomInfo:', error);
         res.status(500).json({
             success: false,
-            error: '서버 오류가 발생했습니다.'
+            error: '채팅방 정보를 불러올 수 없습니다.',
+            errorType: 'general'
         });
     }
 };
@@ -161,89 +80,41 @@ const getChatMessages = async (req, res) => {
     try {
         const { roomId } = req.params;
         const userId = req.user.userId;
-        
-        // 쿼리 파라미터 파싱 (커서 기반만 사용)
         const limit = parseInt(req.query.limit) || 20;
-        const before = req.query.before; // ISO 시간 문자열
+        const before = req.query.before;
         
-        // limit 범위 검증 (1-100)
-        const validLimit = Math.max(1, Math.min(100, limit));
+        const data = await chatService.getChatMessages(roomId, userId, {
+            limit,
+            before
+        });
         
-        // 권한 확인 및 데이터 조회를 한 번에
-        const { data: roomData, error: roomError } = await supabase
-            .from('chat_rooms')
-            .select('user_id, company_id')
-            .eq('id', roomId)
-            .or(`user_id.eq.${userId},company_id.eq.${userId}`)
-            .single();
-
-        if (roomError || !roomData) {
-            const status = roomError?.code === 'PGRST116' ? 404 : 500;
-            const message = roomError?.code === 'PGRST116' 
-                ? '채팅방을 찾을 수 없거나 접근 권한이 없습니다.' 
-                : '채팅방 접근 확인 중 오류가 발생했습니다.';
-            
-            return res.status(status).json({
-                success: false,
-                error: message
-            });
-        }
-
-        // 메시지 조회 쿼리 구성
-        let query = supabase
-            .from('chat_messages')
-            .select('*')
-            .eq('room_id', roomId);
-
-        // 커서 기반 필터링
-        if (before) {
-            query = query.lt('created_at', before);
-        }
-
-        // 최신 메시지부터 내림차순으로 정렬하고 limit 적용
-        query = query
-            .order('created_at', { ascending: false })
-            .limit(validLimit + 1); // hasMore 판단을 위해 +1
-
-        const { data, error } = await query;
-
-        if (error) {
-            console.error('Error fetching chat messages:', error);
-            return res.status(500).json({
-                success: false,
-                error: '메시지를 불러올 수 없습니다.'
-            });
-        }
-
-        // hasMore 판단 후 실제 데이터는 limit만큼만 반환
-        const hasMore = data && data.length > validLimit;
-        const messages = hasMore ? data.slice(0, validLimit) : (data || []);
-        
-        // 다음 페이지를 위한 커서 (가장 오래된 메시지의 시간)
-        const nextCursor = messages.length > 0 
-            ? messages[messages.length - 1].created_at 
-            : null;
-
         res.json({
             success: true,
-            data: {
-                messages,
-                pagination: {
-                    limit: validLimit,
-                    hasMore,
-                    nextCursor
-                }
-            }
+            data
         });
     } catch (error) {
         console.error('Error in getChatMessages:', error);
+        
+        if (error.code === 'ROOM_NOT_FOUND') {
+            return res.status(404).json({
+                success: false,
+                error: error.message
+            });
+        }
+        
+        if (error.code === 'ACCESS_ERROR') {
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
-            error: '서버 오류가 발생했습니다.'
+            error: '메시지를 불러올 수 없습니다.'
         });
     }
 };
-
 
 // 메시지 읽음 처리
 const markMessagesAsRead = async (req, res) => {
@@ -251,63 +122,35 @@ const markMessagesAsRead = async (req, res) => {
         const { roomId } = req.params;
         const userId = req.user.userId;
         
-        // 권한 확인 및 데이터 조회를 한 번에
-        const { data: roomData, error: roomError } = await supabase
-            .from('chat_rooms')
-            .select('user_id, company_id')
-            .eq('id', roomId)
-            .or(`user_id.eq.${userId},company_id.eq.${userId}`)
-            .single();
-
-        if (roomError || !roomData) {
-            const status = roomError?.code === 'PGRST116' ? 404 : 500;
-            const message = roomError?.code === 'PGRST116' 
-                ? '채팅방을 찾을 수 없거나 접근 권한이 없습니다.' 
-                : '채팅방 접근 확인 중 오류가 발생했습니다.';
-            
-            return res.status(status).json({
-                success: false,
-                error: message
-            });
-        }
-
-        // 메시지 읽음 처리와 채팅방 카운트 업데이트를 병렬로 실행
-        const isUser = roomData.user_id === userId;
-        const updateField = isUser ? 'user_unread_count' : 'company_unread_count';
+        await chatService.markMessagesAsRead(roomId, userId);
         
-        const [messageUpdate, roomUpdate] = await Promise.allSettled([
-            supabase
-                .from('chat_messages')
-                .update({ is_read: true })
-                .eq('room_id', roomId)
-                .neq('sender_id', userId)
-                .eq('is_read', false),
-            supabase
-                .from('chat_rooms')
-                .update({ [updateField]: 0 })
-                .eq('id', roomId)
-        ]);
-
-        // 에러 로깅 (실패해도 계속 진행)
-        if (messageUpdate.status === 'rejected') {
-            console.error('Error marking messages as read:', messageUpdate.reason);
-        }
-        if (roomUpdate.status === 'rejected') {
-            console.error('Error updating room unread count:', roomUpdate.reason);
-        }
-
         // WebSocket을 통한 실시간 총 안읽은 메시지 카운트 전송
         const io = req.app.get('io');
         if (io && io.chatHandler) {
             await io.chatHandler.sendTotalUnreadCount(userId);
         }
-
+        
         res.json({
             success: true,
             message: '메시지를 읽음 처리했습니다.'
         });
     } catch (error) {
         console.error('Error in markMessagesAsRead:', error);
+        
+        if (error.code === 'ROOM_NOT_FOUND') {
+            return res.status(404).json({
+                success: false,
+                error: error.message
+            });
+        }
+        
+        if (error.code === 'ACCESS_ERROR') {
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
             error: '서버 오류가 발생했습니다.'
@@ -315,73 +158,44 @@ const markMessagesAsRead = async (req, res) => {
     }
 };
 
+// 채팅방 생성
 const createChatRoom = async (req, res) => {
     try {
         const { application_id, user_id, company_id, job_posting_id } = req.body;
         
-        // 필수 파라미터 검증
-        if (!application_id || !user_id || !company_id || !job_posting_id) {
-            return res.status(400).json({
-                success: false,
-                error: '필수 파라미터가 누락되었습니다.'
-            });
-        }
+        const room = await chatService.createChatRoom(
+            application_id,
+            user_id,
+            company_id,
+            job_posting_id
+        );
         
-        // 이미 존재하는 채팅방인지 확인
-        const { data: existingRoom, error: checkError } = await supabase
-            .from('chat_rooms')
-            .select('id')
-            .eq('application_id', application_id)
-            .single();
-            
-        if (checkError && checkError.code !== 'PGRST116') {
-            console.error('Error checking existing chat room:', checkError);
-            return res.status(500).json({
-                success: false,
-                error: '채팅방 확인 중 오류가 발생했습니다.'
-            });
-        }
-        
-        if (existingRoom) {
+        if (room.alreadyExists) {
             return res.json({
                 success: true,
-                data: { id: existingRoom.id },
+                data: { id: room.id },
                 message: '이미 존재하는 채팅방입니다.'
-            });
-        }
-        
-        // 새 채팅방 생성
-        const { data: newRoom, error: createError } = await supabase
-            .from('chat_rooms')
-            .insert({
-                application_id,
-                user_id,
-                company_id,
-                job_posting_id,
-                is_active: true
-            })
-            .select('id')
-            .single();
-            
-        if (createError) {
-            console.error('Error creating chat room:', createError);
-            return res.status(500).json({
-                success: false,
-                error: '채팅방 생성에 실패했습니다.'
             });
         }
         
         res.json({
             success: true,
-            data: newRoom,
+            data: room,
             message: '채팅방이 성공적으로 생성되었습니다.'
         });
-        
     } catch (error) {
         console.error('Error in createChatRoom:', error);
+        
+        if (error.code === 'MISSING_PARAMS') {
+            return res.status(400).json({
+                success: false,
+                error: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
-            error: '서버 오류가 발생했습니다.'
+            error: '채팅방 생성에 실패했습니다.'
         });
     }
 };
@@ -390,31 +204,8 @@ const createChatRoom = async (req, res) => {
 const getTotalUnreadCount = async (req, res) => {
     try {
         const userId = req.user.userId;
+        const totalUnreadCount = await chatService.getTotalUnreadCount(userId);
         
-        const { data: rooms, error } = await supabase
-            .from('chat_rooms')
-            .select('user_unread_count, company_unread_count, user_id, company_id')
-            .or(`user_id.eq.${userId},company_id.eq.${userId}`)
-            .eq('is_active', true);
-
-        if (error) {
-            console.error('Error fetching total unread count:', error);
-            return res.status(500).json({
-                success: false,
-                error: '안읽은 메시지 카운트 조회에 실패했습니다.'
-            });
-        }
-
-        // 해당 사용자의 총 안읽은 메시지 수 계산
-        let totalUnreadCount = 0;
-        rooms.forEach(room => {
-            if (room.user_id === userId) {
-                totalUnreadCount += room.user_unread_count || 0;
-            } else if (room.company_id === userId) {
-                totalUnreadCount += room.company_unread_count || 0;
-            }
-        });
-
         res.json({
             success: true,
             data: { totalUnreadCount }
@@ -423,7 +214,7 @@ const getTotalUnreadCount = async (req, res) => {
         console.error('Error in getTotalUnreadCount:', error);
         res.status(500).json({
             success: false,
-            error: '서버 오류가 발생했습니다.'
+            error: '안읽은 메시지 카운트 조회에 실패했습니다.'
         });
     }
 };
@@ -434,63 +225,45 @@ const findExistingRoom = async (req, res) => {
         const { user_id, company_id } = req.query;
         const currentUserId = req.user.userId;
         
-        // 파라미터 검증
-        if (!user_id || !company_id) {
-            return res.status(400).json({
-                success: false,
-                error: '사용자 ID와 회사 ID가 필요합니다.'
-            });
-        }
+        const room = await chatService.findExistingRoom(
+            user_id,
+            company_id,
+            currentUserId
+        );
         
-        // 권한 검증 (요청자가 해당 사용자 본인이거나 해당 회사인지 확인)
-        if (currentUserId !== user_id && currentUserId !== company_id) {
-            return res.status(403).json({
-                success: false,
-                error: '접근 권한이 없습니다.'
-            });
-        }
-        
-        // 동일한 회사와의 기존 채팅방 찾기
-        const { data: existingRoom, error } = await supabase
-            .from('chat_rooms')
-            .select('id, application_id, job_posting_id')
-            .eq('user_id', user_id)
-            .eq('company_id', company_id)
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-            .limit(1);
-            
-        if (error) {
-            console.error('Error finding existing chat room:', error);
-            return res.status(500).json({
-                success: false,
-                error: '채팅방 검색 중 오류가 발생했습니다.'
-            });
-        }
-        
-        if (existingRoom && existingRoom.length > 0) {
+        if (room) {
             return res.json({
                 success: true,
-                data: { 
-                    roomId: existingRoom[0].id,
-                    applicationId: existingRoom[0].application_id,
-                    jobPostingId: existingRoom[0].job_posting_id
-                },
+                data: room,
                 message: '기존 채팅방을 찾았습니다.'
             });
-        } else {
-            return res.json({
-                success: true,
-                data: null,
-                message: '기존 채팅방이 없습니다.'
+        }
+        
+        res.json({
+            success: true,
+            data: null,
+            message: '기존 채팅방이 없습니다.'
+        });
+    } catch (error) {
+        console.error('Error in findExistingRoom:', error);
+        
+        if (error.code === 'MISSING_PARAMS') {
+            return res.status(400).json({
+                success: false,
+                error: error.message
             });
         }
         
-    } catch (error) {
-        console.error('Error in findExistingRoom:', error);
+        if (error.code === 'FORBIDDEN') {
+            return res.status(403).json({
+                success: false,
+                error: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
-            error: '서버 오류가 발생했습니다.'
+            error: '채팅방 검색 중 오류가 발생했습니다.'
         });
     }
 };
