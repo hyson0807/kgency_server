@@ -10,8 +10,6 @@ router.get('/check-duplicate', authMiddleware, applicationController.checkDuplic
 // POST /api/applications - Create normal application (requires auth)
 router.post('/', authMiddleware, applicationController.createApplication);
 
-// POST /api/applications/instant-interview - Create instant interview application (requires auth)
-router.post('/instant-interview', authMiddleware, applicationController.createInstantInterviewApplication);
 
 router.get('/user/:userId', applicationController.getApplicationsByUserId)
 
