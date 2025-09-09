@@ -135,7 +135,8 @@ exports.createApplication = async (req, res) => {
                     applicationData.user.name,
                     applicationData.job_posting.title,
                     'regular',
-                    applicationData.id
+                    applicationData.id,
+                    applicationData.job_posting.id
                 );
                 console.log('New regular application notification sent to company');
             }
@@ -252,7 +253,8 @@ exports.createInstantInterviewApplication = async (req, res) => {
                     applicationData.user.name,
                     applicationData.job_posting.title,
                     'instant_interview',
-                    applicationData.id
+                    applicationData.id,
+                    applicationData.job_posting.id
                 );
                 console.log('New instant interview application notification sent to company');
             }
