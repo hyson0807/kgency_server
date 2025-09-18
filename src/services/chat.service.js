@@ -305,6 +305,57 @@ const findExistingRoom = async (userId, companyId, currentUserId) => {
     return null;
 };
 
+// 일반 채팅방 생성 (job_posting_id 없이)
+const createGeneralChatRoom = async (userId, companyId) => {
+    // 필수 파라미터 검증
+    if (!userId || !companyId) {
+        const err = new Error('사용자 ID와 회사 ID가 필요합니다.');
+        err.code = 'MISSING_PARAMS';
+        throw err;
+    }
+
+    // 이미 존재하는 일반 채팅방 확인 (application_id와 job_posting_id가 null인 채팅방)
+    const { data: existingRoom, error: checkError } = await supabase
+        .from('chat_rooms')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('company_id', companyId)
+        .is('application_id', null)
+        .is('job_posting_id', null)
+        .eq('is_active', true)
+        .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+    }
+
+    if (existingRoom) {
+        return {
+            id: existingRoom.id,
+            alreadyExists: true
+        };
+    }
+
+    // 새 일반 채팅방 생성
+    const { data: newRoom, error: createError } = await supabase
+        .from('chat_rooms')
+        .insert({
+            user_id: userId,
+            company_id: companyId,
+            application_id: null,
+            job_posting_id: null,
+            is_active: true
+        })
+        .select('id')
+        .single();
+
+    if (createError) {
+        throw createError;
+    }
+
+    return newRoom;
+};
+
 module.exports = {
     getUserChatRooms,
     getCompanyChatRooms,
@@ -312,6 +363,7 @@ module.exports = {
     getChatMessages,
     markMessagesAsRead,
     createChatRoom,
+    createGeneralChatRoom,
     getTotalUnreadCount,
     findExistingRoom
 };

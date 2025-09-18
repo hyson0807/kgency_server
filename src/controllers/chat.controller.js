@@ -224,13 +224,13 @@ const findExistingRoom = async (req, res) => {
     try {
         const { user_id, company_id } = req.query;
         const currentUserId = req.user.userId;
-        
+
         const room = await chatService.findExistingRoom(
             user_id,
             company_id,
             currentUserId
         );
-        
+
         if (room) {
             return res.json({
                 success: true,
@@ -238,7 +238,7 @@ const findExistingRoom = async (req, res) => {
                 message: '기존 채팅방을 찾았습니다.'
             });
         }
-        
+
         res.json({
             success: true,
             data: null,
@@ -246,24 +246,64 @@ const findExistingRoom = async (req, res) => {
         });
     } catch (error) {
         console.error('Error in findExistingRoom:', error);
-        
+
         if (error.code === 'MISSING_PARAMS') {
             return res.status(400).json({
                 success: false,
                 error: error.message
             });
         }
-        
+
         if (error.code === 'FORBIDDEN') {
             return res.status(403).json({
                 success: false,
                 error: error.message
             });
         }
-        
+
         res.status(500).json({
             success: false,
             error: '채팅방 검색 중 오류가 발생했습니다.'
+        });
+    }
+};
+
+// 일반 채팅방 생성 (job_posting_id 없이)
+const createGeneralChatRoom = async (req, res) => {
+    try {
+        const { user_id, company_id } = req.body;
+
+        const room = await chatService.createGeneralChatRoom(
+            user_id,
+            company_id
+        );
+
+        if (room.alreadyExists) {
+            return res.json({
+                success: true,
+                data: { id: room.id },
+                message: '이미 존재하는 일반 채팅방입니다.'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: room,
+            message: '일반 채팅방이 성공적으로 생성되었습니다.'
+        });
+    } catch (error) {
+        console.error('Error in createGeneralChatRoom:', error);
+
+        if (error.code === 'MISSING_PARAMS') {
+            return res.status(400).json({
+                success: false,
+                error: error.message
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            error: '일반 채팅방 생성에 실패했습니다.'
         });
     }
 };
@@ -275,6 +315,7 @@ module.exports = {
     getChatMessages,
     markMessagesAsRead,
     createChatRoom,
+    createGeneralChatRoom,
     findExistingRoom,
     getTotalUnreadCount
 };
