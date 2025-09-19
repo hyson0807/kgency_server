@@ -150,27 +150,6 @@ const getCompanyJobPostingsWithStatus = async (req, res) => {
     }
 };
 
-// 매칭된 공고 조회 (사용자 키워드 기반 적합도 계산) - 성능 최적화
-const getMatchedPostings = async (req, res) => {
-    try {
-        const userId = req.user.userId;
-
-        const matchedPostings = await jobPostingService.getMatchedPostingsForUser(userId);
-
-        res.json({
-            success: true,
-            data: matchedPostings
-        });
-
-    } catch (error) {
-        console.error('Matched postings fetch error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch matched postings',
-            error: error.message
-        });
-    }
-};
 
 const getCompanyJobPostings = async (req, res) => {
     try {
@@ -267,13 +246,32 @@ const deleteJobPosting = async (req, res) => {
     }
 };
 
+const getAllActivePostings = async (req, res) => {
+    try {
+        const data = await jobPostingService.getActiveJobPostings();
+
+        res.status(200).json({
+            success: true,
+            data,
+            count: data.length
+        });
+    } catch (error) {
+        console.error('Get all active job postings error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch job postings',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getActiveJobPostings,
+    getAllActivePostings,
     getJobPostingById,
     createJobPosting,
     updateJobPosting,
     getCompanyJobPostingsWithStatus,
-    getMatchedPostings,
     getCompanyJobPostings,
     toggleJobPostingActive,
     deleteJobPosting

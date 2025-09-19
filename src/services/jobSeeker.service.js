@@ -1,9 +1,7 @@
 const { supabase } = require('../config/database');
-const SuitabilityCalculator = require('../utils/suitabilityCalculator');
 
 class JobSeekerService {
     constructor() {
-        this.calculator = new SuitabilityCalculator();
     }
 
     // 키워드의 카테고리를 찾는 헬퍼 메서드
@@ -166,11 +164,8 @@ class JobSeekerService {
                 const matchedKeywords = sortedMatchedKeywordDetails.map(detail => detail.keyword);
                 const matchedKeywordsWithCategory = sortedMatchedKeywordDetails;
 
-                // 적합도 계산 (기존 방식 유지)
+                // 적합도 계산 제거됨
                 let suitability = undefined;
-                if (companyKeywordsForCalculator.length > 0) {
-                    suitability = await this.calculator.calculate(userKeywordIds, companyKeywordsForCalculator);
-                }
 
                 // user_keywords를 제거하고 깔끔한 형태로 반환
                 const { user_keywords, ...cleanJobSeeker } = jobSeeker;
