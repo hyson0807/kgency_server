@@ -15,6 +15,7 @@ const purchaseRoutes = require('./purchase.routes');
 const appInitRoutes = require('./appInit.routes');
 const chatRoutes = require('./chat.routes');
 const audioRoutes = require('./audio.routes');
+const companyRoutes = require('./company.routes');
 const healthController = require('../controllers/health.controller');
 
 // 헬스 체크
@@ -59,6 +60,9 @@ router.use('/chat', chatRoutes);
 
 // 오디오 라우트 추가
 router.use('/audio', audioRoutes);
+
+// 회사 라우트 추가
+router.use('/company', companyRoutes);
 
 // 404 처리
 router.use((req, res) => {
