@@ -58,7 +58,7 @@ router.use('/app-init', appInitRoutes);
 router.use('/chat', chatRoutes);
 
 // 오디오 라우트 추가
-router.use('/audios', audioRoutes);
+router.use('/audio', audioRoutes);
 
 // 404 처리
 router.use((req, res) => {

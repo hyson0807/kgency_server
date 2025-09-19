@@ -176,6 +176,94 @@ const uploadAudio = async (req, res) => {
     });
 };
 
+// 한국어 테스트 오디오 업로드 (전용)
+const uploadKoreanTest = async (req, res) => {
+    console.log('=== Korean Test Audio Upload Request ===');
+    console.log('Headers:', req.headers);
+    console.log('User from auth:', req.user);
+    console.log('Content-Type:', req.headers['content-type']);
+
+    // S3 설정 확인
+    if (!isConfigured) {
+        console.log('❌ S3 not configured');
+        return res.status(500).json({
+            success: false,
+            error: 'S3 credentials not configured. Please contact administrator.'
+        });
+    }
+
+    upload(req, res, async function (err) {
+        console.log('=== After Multer Processing (Korean Test) ===');
+        console.log('Body fields:', req.body ? Object.keys(req.body) : 'No body');
+        console.log('File info:', req.file ? `${req.file.fieldname} - ${req.file.size} bytes` : 'No file');
+        console.log('Upload error:', err);
+
+        if (err) {
+            console.error('Korean test upload error:', err);
+            return res.status(400).json({
+                success: false,
+                error: err.message
+            });
+        }
+
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No audio file provided'
+                });
+            }
+
+            const userId = req.body.user_id || req.user.userId;
+            const duration = parseInt(req.body.duration) || 45; // 기본 45초
+            const questionsAnswered = parseInt(req.body.questions_answered) || 3;
+
+            // S3 URL
+            const audioUrl = req.file.location;
+
+            // korean_tests 테이블에 저장
+            const koreanTestData = {
+                user_id: userId,
+                audio_url: audioUrl,
+                test_date: new Date().toISOString(),
+                status: 'completed',
+                duration: duration,
+                questions_answered: questionsAnswered
+            };
+
+            console.log('Saving to korean_tests table:', koreanTestData);
+
+            const { data, error } = await supabase
+                .from('korean_tests')
+                .insert(koreanTestData)
+                .select()
+                .single();
+
+            if (error) {
+                console.error('Database error during korean test insert:', error);
+                return res.status(500).json({
+                    success: false,
+                    error: 'Failed to save Korean test information to database',
+                    details: error.message
+                });
+            }
+
+            console.log('Korean test saved successfully:', data);
+
+            res.json({
+                success: true,
+                data: data
+            });
+        } catch (error) {
+            console.error('Error saving Korean test info:', error);
+            res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+    });
+};
+
 // 오디오 정보 저장 (클라이언트가 직접 업로드 후)
 const saveAudioInfo = async (req, res) => {
     try {
@@ -429,6 +517,114 @@ const permanentDeleteAudio = async (req, res) => {
     }
 };
 
+// 한국어 테스트 조회 API들
+const getKoreanTestStatus = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        // 사용자의 최신 완료된 한국어 테스트 조회
+        const { data, error } = await supabase
+            .from('korean_tests')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'completed')
+            .order('test_date', { ascending: false })
+            .limit(1);
+
+        if (error) {
+            console.error('Error fetching Korean test status:', error);
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+
+        const hasCompletedTest = data && data.length > 0;
+        const latestTest = hasCompletedTest ? data[0] : null;
+
+        res.json({
+            success: true,
+            data: {
+                korean_test_completed: hasCompletedTest,
+                latest_test: latestTest
+            }
+        });
+    } catch (error) {
+        console.error('Error checking Korean test status:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
+const getKoreanTests = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { limit = 10, offset = 0 } = req.query;
+
+        const { data, error } = await supabase
+            .from('korean_tests')
+            .select('*')
+            .eq('user_id', userId)
+            .order('test_date', { ascending: false })
+            .range(offset, offset + limit - 1);
+
+        if (error) {
+            console.error('Error fetching Korean tests:', error);
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            data: data || []
+        });
+    } catch (error) {
+        console.error('Error fetching Korean tests:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
+const getLatestKoreanTest = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        const { data, error } = await supabase
+            .from('korean_tests')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'completed')
+            .order('test_date', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+            console.error('Error fetching latest Korean test:', error);
+            return res.status(500).json({
+                success: false,
+                error: error.message
+            });
+        }
+
+        res.json({
+            success: true,
+            data: data || null
+        });
+    } catch (error) {
+        console.error('Error fetching latest Korean test:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     getUploadUrl,
     uploadAudio,
@@ -436,5 +632,9 @@ module.exports = {
     getUserAudios,
     deleteAudio,
     permanentDeleteAudio,
-    getAudioUrl
+    getAudioUrl,
+    uploadKoreanTest,
+    getKoreanTestStatus,
+    getKoreanTests,
+    getLatestKoreanTest
 };

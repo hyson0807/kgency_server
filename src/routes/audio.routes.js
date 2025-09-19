@@ -27,4 +27,10 @@ router.delete('/:id/permanent', audioController.permanentDeleteAudio);
 // 오디오 조회 (Presigned URL 포함)
 router.get('/:id', audioController.getAudioUrl);
 
+// 한국어 테스트 관련 라우트
+router.post('/korean-test/upload', audioController.uploadKoreanTest);
+router.get('/korean-test/status', audioController.getKoreanTestStatus);
+router.get('/korean-test/list', audioController.getKoreanTests);
+router.get('/korean-test/latest', audioController.getLatestKoreanTest);
+
 module.exports = router;
