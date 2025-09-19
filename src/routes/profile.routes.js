@@ -35,4 +35,10 @@ router.put('/image', authMiddleware, profileController.updateProfileImage);
 // DELETE /api/profiles/image - Delete profile image
 router.delete('/image', authMiddleware, profileController.deleteProfileImage);
 
+// POST /api/profiles/onboarding-complete - Complete onboarding
+router.post('/onboarding-complete', authMiddleware, profileController.completeOnboarding);
+
+// GET /api/profiles/universities - Get university list
+router.get('/universities', profileController.getUniversities);
+
 module.exports = router;

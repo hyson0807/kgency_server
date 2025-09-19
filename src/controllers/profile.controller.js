@@ -494,6 +494,129 @@ const deleteProfileImage = async (req, res) => {
     }
 };
 
+// 온보딩 완료
+const completeOnboarding = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const { name, age, gender, selectedCountry, visa, university } = req.body;
+
+        // 입력 유효성 검사
+        if (!name || !age || !gender || !selectedCountry || !visa || !university) {
+            return res.status(400).json({
+                success: false,
+                error: '모든 필수 정보를 입력해주세요.'
+            });
+        }
+
+        // 현재 프로필 정보 가져오기
+        const { data: currentProfile, error: currentProfileError } = await supabase
+            .from('profiles')
+            .select('user_type')
+            .eq('id', userId)
+            .single();
+
+        if (currentProfileError) {
+            throw currentProfileError;
+        }
+
+        if (currentProfile.user_type !== 'user') {
+            return res.status(400).json({
+                success: false,
+                error: '사용자 계정만 온보딩을 완료할 수 있습니다.'
+            });
+        }
+
+        // 1. profiles 테이블 업데이트 - 이름과 온보딩 완료 상태
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .update({
+                name: name,
+                onboarding_completed: true
+            })
+            .eq('id', userId);
+
+        if (profileError) throw profileError;
+
+        // 2. user_info 테이블 업데이트 또는 생성
+        const userInfoData = {
+            name: name,
+            age: parseInt(age),
+            gender: gender,
+            visa: visa,
+            university: university,
+            country: selectedCountry
+        };
+
+        // user_info가 이미 있는지 확인
+        const { data: existing } = await supabase
+            .from('user_info')
+            .select('id')
+            .eq('user_id', userId)
+            .single();
+
+        if (existing) {
+            // 업데이트
+            const { error } = await supabase
+                .from('user_info')
+                .update(userInfoData)
+                .eq('user_id', userId);
+
+            if (error) throw error;
+        } else {
+            // 새로 생성
+            const { error } = await supabase
+                .from('user_info')
+                .insert({
+                    ...userInfoData,
+                    user_id: userId
+                });
+
+            if (error) throw error;
+        }
+
+        res.json({
+            success: true,
+            message: '온보딩이 성공적으로 완료되었습니다.'
+        });
+
+    } catch (error) {
+        console.error('온보딩 완료 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '온보딩 완료에 실패했습니다.'
+        });
+    }
+};
+
+// 대학교 목록 조회
+const getUniversities = async (req, res) => {
+    try {
+        // 한국 주요 대학교 목록
+        const universities = [
+            '서울대학교', '고려대학교', '연세대학교', '한양대학교', '중앙대학교',
+            '경희대학교', '한국외국어대학교', '서강대학교', '성균관대학교', '이화여자대학교',
+            '부산대학교', '경상국립대학교', '전남대학교', '충남대학교', '충북대학교',
+            '강원대학교', '제주대학교', '인하대학교', '아주대학교', '가천대학교',
+            '건국대학교', '국민대학교', '동국대학교', '명지대학교', '상명대학교',
+            '세종대학교', '숙명여자대학교', '숭실대학교', '홍익대학교', '한국기술교육대학교',
+            '카이스트(KAIST)', '포스텍(POSTECH)', '지스트(GIST)', '유니스트(UNIST)', '디지스트(DGIST)',
+            '기타'
+        ].sort();
+
+        res.json({
+            success: true,
+            data: universities
+        });
+
+    } catch (error) {
+        console.error('대학교 목록 조회 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '대학교 목록을 불러오는데 실패했습니다.'
+        });
+    }
+};
+
 module.exports = {
     getProfile,
     updateProfile,
@@ -504,5 +627,7 @@ module.exports = {
     removePushToken: exports.removePushToken,
     uploadProfileImage,
     updateProfileImage,
-    deleteProfileImage
+    deleteProfileImage,
+    completeOnboarding,
+    getUniversities
 };
