@@ -21,6 +21,7 @@ const s3 = new AWS.S3({
 });
 
 const S3_VIDEO_PREFIX = 'video/';
+const S3_AUDIO_PREFIX = 'record/';
 
 // S3 연결 테스트 (개발 환경에서만)
 if (process.env.NODE_ENV === 'development' && AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY) {
@@ -37,5 +38,6 @@ module.exports = {
     s3,
     S3_BUCKET,
     S3_VIDEO_PREFIX,
+    S3_AUDIO_PREFIX,
     isConfigured: !!AWS_ACCESS_KEY_ID && !!AWS_SECRET_ACCESS_KEY
 };

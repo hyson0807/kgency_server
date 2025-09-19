@@ -43,7 +43,7 @@ exports.checkDuplicateApplication = async (req, res) => {
     }
 };
 
-// 일반 지원서 생성 (메시지 포함)
+// 채팅 지원서 생성 (메시지 포함) - 이제 무료
 exports.createApplication = async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -56,33 +56,8 @@ exports.createApplication = async (req, res) => {
             });
         }
 
-        let tokenTransactionId = null;
-
-        // 토큰 사용이 요청된 경우 토큰 차감 (채팅 지원용)
-        if (useToken) {
-            try {
-                const tokenResult = await purchaseService.spendTokens(
-                    userId,
-                    1, // 채팅 지원 1회 = 토큰 1개
-                    '채팅 지원'
-                );
-                tokenTransactionId = tokenResult.transactionId;
-            } catch (tokenError) {
-                console.error('토큰 사용 실패:', tokenError);
-                
-                if (tokenError.message.includes('Insufficient tokens')) {
-                    return res.status(400).json({
-                        success: false,
-                        error: '토큰이 부족합니다. 상점에서 토큰을 구매해주세요.'
-                    });
-                }
-                
-                return res.status(500).json({
-                    success: false,
-                    error: '토큰 처리 중 오류가 발생했습니다.'
-                });
-            }
-        }
+        // 토큰 사용은 더 이상 처리하지 않음 (무료 전환)
+        // useToken 파라미터는 호환성을 위해 유지하지만 무시됨
 
         // 지원 내역 저장
         const { data: application, error: appError } = await supabase
@@ -93,9 +68,9 @@ exports.createApplication = async (req, res) => {
                 job_posting_id: jobPostingId,
                 message_id: messageId,
                 status: 'pending',
-                type: useToken ? 'chat_application' : 'user_initiated',
-                token_used: useToken || false,
-                token_transaction_id: tokenTransactionId
+                type: 'chat_application', // 모든 지원이 이제 채팅 지원
+                token_used: false, // 항상 false
+                token_transaction_id: null // 항상 null
             })
             .select()
             .single();
@@ -129,16 +104,16 @@ exports.createApplication = async (req, res) => {
                 .single();
 
             if (!dataError && applicationData) {
-                // 회사에게 새로운 일반지원 알림 발송
+                // 회사에게 새로운 채팅지원 알림 발송
                 await notificationService.sendNewApplicationNotification(
                     companyId,
                     applicationData.user.name,
                     applicationData.job_posting.title,
-                    'regular',
+                    'chat',
                     applicationData.id,
                     applicationData.job_posting.id
                 );
-                console.log('New regular application notification sent to company');
+                console.log('New chat application notification sent to company');
             }
         } catch (notificationError) {
             // 알림 발송 실패해도 지원서 생성은 성공으로 처리
@@ -148,9 +123,7 @@ exports.createApplication = async (req, res) => {
         res.json({
             success: true,
             data: application,
-            message: useToken 
-                ? '채팅 지원이 성공적으로 완료되었습니다. 토큰 1개가 사용되었습니다.'
-                : '지원서가 성공적으로 제출되었습니다.'
+            message: '채팅 지원이 성공적으로 완료되었습니다. 이제 채팅방에서 기업과 소통할 수 있습니다.'
         });
 
     } catch (error) {

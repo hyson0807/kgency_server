@@ -14,7 +14,7 @@ const jobSeekerRoutes = require('./jobSeeker.routes');
 const purchaseRoutes = require('./purchase.routes');
 const appInitRoutes = require('./appInit.routes');
 const chatRoutes = require('./chat.routes');
-const videoRoutes = require('./video.routes');
+const audioRoutes = require('./audio.routes');
 const healthController = require('../controllers/health.controller');
 
 // 헬스 체크
@@ -57,8 +57,8 @@ router.use('/app-init', appInitRoutes);
 // 채팅 라우트 추가
 router.use('/chat', chatRoutes);
 
-// 비디오 라우트 추가
-router.use('/videos', videoRoutes);
+// 오디오 라우트 추가
+router.use('/audios', audioRoutes);
 
 // 404 처리
 router.use((req, res) => {
