@@ -128,11 +128,8 @@ const spendTokens = async (req, res) => {
       });
     }
 
-    // 트랜잭션 시작
-    const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // 토큰 사용 기록 저장
-    const { error: transactionError } = await supabase
+    // 트랜잭션 ID 생성 (UUID 형식으로)
+    const { data: transactionData, error: transactionInsertError } = await supabase
       .from('token_transactions')
       .insert({
         user_id: companyId,
@@ -141,15 +138,19 @@ const spendTokens = async (req, res) => {
         reference_id: target_id,
         description: purpose === 'profile_unlock' ? '프로필 열람' : purpose,
         metadata: { purpose, target_id }
-      });
+      })
+      .select('id')
+      .single();
 
-    if (transactionError) {
-      console.error('Token transaction insert error:', transactionError);
+    if (transactionInsertError) {
+      console.error('Token transaction insert error:', transactionInsertError);
       return res.status(500).json({
         success: false,
         error: '토큰 사용 기록 저장 중 오류가 발생했습니다.'
       });
     }
+
+    const transactionId = transactionData.id;
 
     // 토큰 잔액 업데이트
     const { error: balanceUpdateError } = await supabase
@@ -168,23 +169,60 @@ const spendTokens = async (req, res) => {
       });
     }
 
-    // 프로필 열람의 경우 applications 테이블 업데이트
+    // 프로필 열람의 경우 처리
     if (purpose === 'profile_unlock' && target_id) {
+      // 먼저 application에서 user_id를 가져옴
+      const { data: application, error: appFetchError } = await supabase
+        .from('applications')
+        .select('user_id')
+        .eq('id', target_id)
+        .eq('company_id', companyId)
+        .single();
+
+      if (appFetchError || !application) {
+        console.error('Application fetch error:', appFetchError);
+        return res.status(500).json({
+          success: false,
+          error: '지원서 정보를 찾을 수 없습니다.'
+        });
+      }
+
+      // company_unlocked_profiles 테이블에 기록
+      const { error: unlockError } = await supabase
+        .from('company_unlocked_profiles')
+        .insert({
+          company_id: companyId,
+          user_id: application.user_id,
+          unlocked_at: new Date().toISOString(),
+          token_transaction_id: transactionId
+        });
+
+      if (unlockError) {
+        // 이미 언락된 경우 (unique constraint violation) 무시
+        if (unlockError.code !== '23505') {
+          console.error('Profile unlock insert error:', unlockError);
+          return res.status(500).json({
+            success: false,
+            error: '프로필 열람 처리 중 오류가 발생했습니다.'
+          });
+        }
+      }
+
+      // 같은 회사-사용자 조합의 모든 applications 업데이트 (호환성 유지)
       const { error: updateError } = await supabase
         .from('applications')
         .update({
           profile_unlocked_at: new Date().toISOString()
         })
-        .eq('id', target_id)
+        .eq('user_id', application.user_id)
         .eq('company_id', companyId);
 
       if (updateError) {
-        console.error('Profile unlock update error:', updateError);
-        return res.status(500).json({
-          success: false,
-          error: '프로필 열람 처리 중 오류가 발생했습니다.'
-        });
+        console.error('Application update error:', updateError);
+        // 이건 실패해도 계속 진행
       }
+
+      console.log(`Profile unlocked for company ${companyId} and user ${application.user_id}`);
     }
 
     res.json({
@@ -389,8 +427,16 @@ const getApplicationByRoom = async (req, res) => {
       });
     }
 
-    // 프로필 열람 여부 확인
-    const isProfileUnlocked = !!application.profile_unlocked_at;
+    // 프로필 열람 여부 확인 - 새로운 테이블에서 확인
+    const { data: unlockedProfile } = await supabase
+      .from('company_unlocked_profiles')
+      .select('unlocked_at')
+      .eq('company_id', companyId)
+      .eq('user_id', application.user_id)
+      .single();
+
+    // 새 테이블 또는 기존 application 테이블에서 확인
+    const isProfileUnlocked = !!unlockedProfile || !!application.profile_unlocked_at;
 
     // 프로필이 열람된 경우에만 한국어 테스트 정보 포함
     let koreanTest = null;
@@ -458,8 +504,18 @@ const getApplicantProfile = async (req, res) => {
       });
     }
 
-    // 프로필 열람 권한 확인
-    if (!application.profile_unlocked_at) {
+    // 프로필 열람 권한 확인 - 새로운 테이블에서 확인
+    const { data: unlockedProfile } = await supabase
+      .from('company_unlocked_profiles')
+      .select('unlocked_at')
+      .eq('company_id', companyId)
+      .eq('user_id', application.user_id)
+      .single();
+
+    // 새 테이블 또는 기존 application 테이블에서 확인
+    const isProfileUnlocked = !!unlockedProfile || !!application.profile_unlocked_at;
+
+    if (!isProfileUnlocked) {
       return res.status(403).json({
         success: false,
         error: '프로필 열람 권한이 없습니다.',

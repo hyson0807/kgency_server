@@ -30,8 +30,12 @@ const getCompanyChatRooms = async (companyId) => {
         .from('chat_rooms')
         .select(`
             *,
-            user:profiles!user_id(name),
-            job_postings(title)
+            user:profiles!user_id(
+                name,
+                user_info(age, university)
+            ),
+            job_postings(title),
+            application:applications(profile_unlocked_at)
         `)
         .eq('company_id', companyId)
         .eq('is_active', true)
@@ -44,7 +48,7 @@ const getCompanyChatRooms = async (companyId) => {
     // 탈퇴한 사용자가 포함된 채팅방 처리
     return (data || []).map(room => ({
         ...room,
-        user: room.user || { name: '탈퇴한 사용자' }
+        user: room.user || { name: '탈퇴한 사용자', user_info: null }
     }));
 };
 

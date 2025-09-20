@@ -4,7 +4,7 @@ const multer = require('multer');
 const multerS3 = require('multer-s3');
 const path = require('path');
 
-// S3 업로드 설정
+// S3 업로드 설정 (한국어 테스트 전용)
 const upload = multer({
     storage: multerS3({
         s3: s3,
@@ -16,8 +16,8 @@ const upload = multer({
             const userId = req.body.user_id || req.user?.userId;
             const timestamp = Date.now();
             const ext = path.extname(file.originalname) || '.m4a';
-            console.log(`🎙️ Generating S3 key for user: ${userId}, file: ${file.originalname}`);
-            cb(null, `${S3_AUDIO_PREFIX}${userId}/${timestamp}${ext}`);
+            console.log(`🎙️ Generating S3 key for Korean test - user: ${userId}, file: ${file.originalname}`);
+            cb(null, `${S3_AUDIO_PREFIX}korean_test/${userId}/${timestamp}${ext}`);
         },
         contentType: multerS3.AUTO_CONTENT_TYPE
     }),
@@ -45,536 +45,219 @@ const upload = multer({
     }
 }).single('audio');
 
-// Presigned URL 생성 (클라이언트 직접 업로드용)
-const getUploadUrl = async (req, res) => {
-    try {
-        const { fileName, fileType } = req.body;
-        const userId = req.user.userId;
-
-        if (!fileName || !fileType) {
-            return res.status(400).json({
-                success: false,
-                error: 'fileName and fileType are required'
-            });
-        }
-
-        const timestamp = Date.now();
-        const ext = path.extname(fileName);
-        const key = `${S3_AUDIO_PREFIX}${userId}/${timestamp}${ext}`;
-
-        const params = {
-            Bucket: S3_BUCKET,
-            Key: key,
-            ContentType: fileType,
-            Expires: 3600, // 1시간 유효
-        };
-
-        const uploadUrl = await s3.getSignedUrlPromise('putObject', params);
-
-        res.json({
-            success: true,
-            data: {
-                uploadUrl,
-                key,
-                audioUrl: `https://${S3_BUCKET}.s3.ap-northeast-2.amazonaws.com/${key}`
-            }
-        });
-    } catch (error) {
-        console.error('Error generating upload URL:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-};
-
-// 오디오 업로드 (서버 경유)
-const uploadAudio = async (req, res) => {
-    console.log('=== Audio Upload Request ===');
-    console.log('Headers:', req.headers);
-    console.log('User from auth:', req.user);
-    console.log('Content-Type:', req.headers['content-type']);
-    console.log('S3 configured:', isConfigured);
-
-    // S3 설정 확인
-    if (!isConfigured) {
-        console.log('❌ S3 not configured');
-        return res.status(500).json({
-            success: false,
-            error: 'S3 credentials not configured. Please contact administrator.'
-        });
-    }
-
-    upload(req, res, async function (err) {
-        console.log('=== After Multer Processing ===');
-        console.log('Body fields:', req.body ? Object.keys(req.body) : 'No body');
-        console.log('File info:', req.file ? `${req.file.fieldname} - ${req.file.size} bytes` : 'No file');
-        console.log('Upload error:', err);
-
-        if (err) {
-            console.error('Upload error:', err);
-            return res.status(400).json({
-                success: false,
-                error: err.message
-            });
-        }
-
-        try {
-            if (!req.file) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'No audio file provided'
-                });
-            }
-
-            const userId = req.body.user_id || req.user.userId;
-            const title = req.body.title || `음성 ${new Date().toLocaleDateString()}`;
-            const description = req.body.description || '';
-            const duration = req.body.duration || null;
-
-            // S3 URL
-            const audioUrl = req.file.location;
-
-            // DB에 저장 (테이블 없을 때 처리)
-            let audioData = {
-                user_id: userId,
-                audio_url: audioUrl,
-                title: title,
-                description: description,
-                duration: duration,
-                file_size: req.file.size,
-            };
-
-            // DB에 오디오 정보 저장
-            const { data, error } = await supabase
-                .from('user_audios')
-                .insert(audioData)
-                .select()
-                .single();
-
-            if (error) {
-                console.error('Database error during audio insert:', error);
-                return res.status(500).json({
-                    success: false,
-                    error: 'Failed to save audio information to database'
-                });
-            }
-
-            audioData = data;
-
-            res.json({
-                success: true,
-                data: audioData
-            });
-        } catch (error) {
-            console.error('Error saving audio info:', error);
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        }
-    });
-};
-
-// 한국어 테스트 오디오 업로드 (전용)
+// 한국어 테스트 오디오 업로드
 const uploadKoreanTest = async (req, res) => {
-    console.log('=== Korean Test Audio Upload Request ===');
-    console.log('Headers:', req.headers);
-    console.log('User from auth:', req.user);
-    console.log('Content-Type:', req.headers['content-type']);
+    try {
+        console.log('📤 Korean test upload request received');
+        console.log('Request body before multer:', req.body ? 'Present' : 'Not present yet');
 
-    // S3 설정 확인
-    if (!isConfigured) {
-        console.log('❌ S3 not configured');
-        return res.status(500).json({
-            success: false,
-            error: 'S3 credentials not configured. Please contact administrator.'
-        });
-    }
-
-    upload(req, res, async function (err) {
-        console.log('=== After Multer Processing (Korean Test) ===');
-        console.log('Body fields:', req.body ? Object.keys(req.body) : 'No body');
-        console.log('File info:', req.file ? `${req.file.fieldname} - ${req.file.size} bytes` : 'No file');
-        console.log('Upload error:', err);
-
-        if (err) {
-            console.error('Korean test upload error:', err);
-            return res.status(400).json({
+        // S3 관련 설정 확인
+        if (!isConfigured) {
+            console.error('❌ S3 not configured');
+            return res.status(500).json({
                 success: false,
-                error: err.message
+                error: 'File upload service not configured'
             });
         }
 
-        try {
-            if (!req.file) {
+        // multer 업로드 처리
+        upload(req, res, async (err) => {
+            if (err) {
+                console.error('Upload error:', err);
                 return res.status(400).json({
                     success: false,
-                    error: 'No audio file provided'
+                    error: err.message
                 });
             }
 
-            const userId = req.body.user_id || req.user.userId;
-            const duration = parseInt(req.body.duration) || 45; // 기본 45초
-            const questionsAnswered = parseInt(req.body.questions_answered) || 3;
+            try {
+                if (!req.file) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'No audio file provided'
+                    });
+                }
 
-            // S3 URL
-            const audioUrl = req.file.location;
+                const userId = req.body.user_id || req.user.userId;
+                const questionNumber = req.body.question_number || '1';
+                const duration = req.body.duration || '15';
+                const questionText = req.body.question_text || '';
 
-            // korean_tests 테이블에 저장
-            const koreanTestData = {
-                user_id: userId,
-                audio_url: audioUrl,
-                test_date: new Date().toISOString(),
-                status: 'completed',
-                duration: duration,
-                questions_answered: questionsAnswered
-            };
+                console.log('📊 Processing Korean test data after multer:', {
+                    hasBody: !!req.body,
+                    bodyKeys: req.body ? Object.keys(req.body) : 'no body',
+                    hasFile: !!req.file,
+                    userId,
+                    questionNumber,
+                    duration,
+                    questionText,
+                    fileLocation: req.file?.location
+                });
 
-            console.log('Saving to korean_tests table:', koreanTestData);
+                // S3 URL
+                const audioUrl = req.file.location;
 
-            const { data, error } = await supabase
-                .from('korean_tests')
-                .insert(koreanTestData)
-                .select()
-                .single();
+                console.log('💾 Saving audio to database:', {
+                    userId,
+                    questionNumber,
+                    audioUrl
+                });
 
-            if (error) {
-                console.error('Database error during korean test insert:', error);
-                return res.status(500).json({
+                // 기존 레코드가 있는지 확인 (가장 최근 레코드)
+                const { data: existingRecords, error: selectError } = await supabase
+                    .from('korean_tests')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                const existingRecord = existingRecords?.[0] || null;
+
+                let result;
+                if (existingRecord) {
+                    // 기존 레코드 업데이트
+                    const updateData = {
+                        [`question${questionNumber}_audio`]: audioUrl,
+                        test_date: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    };
+
+                    // 모든 질문이 완료되었는지 확인
+                    const allQuestions = {
+                        question1_audio: existingRecord.question1_audio,
+                        question2_audio: existingRecord.question2_audio,
+                        question3_audio: existingRecord.question3_audio
+                    };
+
+                    // 현재 질문 업데이트
+                    allQuestions[`question${questionNumber}_audio`] = audioUrl;
+
+                    const completedQuestions = Object.values(allQuestions).filter(url => url && url.trim() !== '').length;
+                    updateData.status = completedQuestions === 3 ? 'completed' : 'in_progress';
+                    updateData.questions_answered = completedQuestions;
+
+                    const { data: updateResult, error: updateError } = await supabase
+                        .from('korean_tests')
+                        .update(updateData)
+                        .eq('user_id', userId)
+                        .select()
+                        .single();
+
+                    if (updateError) throw updateError;
+                    result = { data: updateResult, error: null };
+                } else {
+                    // 새 레코드 생성
+                    const koreanTestData = {
+                        user_id: userId,
+                        [`question${questionNumber}_audio`]: audioUrl,
+                        test_date: new Date().toISOString(),
+                        status: 'in_progress',
+                        duration: parseInt(duration),
+                        questions_answered: 1
+                    };
+
+                    const { data: insertResult, error: insertError } = await supabase
+                        .from('korean_tests')
+                        .insert(koreanTestData)
+                        .select()
+                        .single();
+
+                    if (insertError) throw insertError;
+                    result = { data: insertResult, error: null };
+                }
+
+                const { data, error } = result;
+
+                if (error) {
+                    console.error('Database error during Korean test insert:', error);
+                    return res.status(500).json({
+                        success: false,
+                        error: 'Failed to save Korean test information to database'
+                    });
+                }
+
+                console.log('✅ Korean test saved successfully:', data);
+
+                res.json({
+                    success: true,
+                    data: data
+                });
+            } catch (error) {
+                console.error('Error processing Korean test:', error);
+                res.status(500).json({
                     success: false,
-                    error: 'Failed to save Korean test information to database',
-                    details: error.message
+                    error: 'Internal server error during Korean test processing'
                 });
             }
-
-            console.log('Korean test saved successfully:', data);
-
-            res.json({
-                success: true,
-                data: data
-            });
-        } catch (error) {
-            console.error('Error saving Korean test info:', error);
-            res.status(500).json({
-                success: false,
-                error: error.message
-            });
-        }
-    });
-};
-
-// 오디오 정보 저장 (클라이언트가 직접 업로드 후)
-const saveAudioInfo = async (req, res) => {
-    try {
-        const { audio_url, title, description, duration, file_size } = req.body;
-        const userId = req.user.userId;
-
-        if (!audio_url) {
-            return res.status(400).json({
-                success: false,
-                error: 'audio_url is required'
-            });
-        }
-
-        const { data, error } = await supabase
-            .from('user_audios')
-            .insert({
-                user_id: userId,
-                audio_url,
-                title: title || `음성 ${new Date().toLocaleDateString()}`,
-                description,
-                duration,
-                file_size
-            })
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        res.json({
-            success: true,
-            data
         });
+
     } catch (error) {
-        console.error('Error saving audio info:', error);
+        console.error('Korean test upload error:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: 'Korean test upload failed'
         });
     }
 };
 
-// 사용자 오디오 목록 조회
-const getUserAudios = async (req, res) => {
-    try {
-        const userId = req.user.userId;
-
-        const { data, error } = await supabase
-            .from('user_audios')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('is_active', true)
-            .order('created_at', { ascending: false });
-
-        if (error) {
-            throw error;
-        }
-
-        res.json({
-            success: true,
-            data: data || []
-        });
-    } catch (error) {
-        console.error('Error fetching audios:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-};
-
-// 오디오 삭제 (soft delete + S3 파일 삭제)
-const deleteAudio = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const userId = req.user.userId;
-
-        // 먼저 오디오 정보를 가져옴
-        const { data: audioData, error: fetchError } = await supabase
-            .from('user_audios')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .eq('is_active', true)
-            .single();
-
-        if (fetchError || !audioData) {
-            return res.status(404).json({
-                success: false,
-                error: 'Audio not found or already deleted'
-            });
-        }
-
-        // S3에서 파일 삭제
-        try {
-            if (audioData.audio_url && isConfigured) {
-                // S3 URL에서 키 추출
-                const urlParts = audioData.audio_url.split('/');
-                const key = urlParts.slice(3).join('/'); // 도메인 부분 제거
-
-                console.log(`🗑️ Deleting S3 object: ${key}`);
-
-                const deleteParams = {
-                    Bucket: S3_BUCKET,
-                    Key: key
-                };
-
-                await s3.deleteObject(deleteParams).promise();
-                console.log(`✅ Successfully deleted S3 object: ${key}`);
-            }
-        } catch (s3Error) {
-            console.error('Error deleting from S3:', s3Error);
-            // S3 삭제 실패해도 DB에서는 삭제 진행
-        }
-
-        // DB에서 soft delete
-        const { data, error } = await supabase
-            .from('user_audios')
-            .update({ is_active: false })
-            .eq('id', id)
-            .eq('user_id', userId)
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        res.json({
-            success: true,
-            message: 'Audio and S3 file deleted successfully'
-        });
-    } catch (error) {
-        console.error('Error deleting audio:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-};
-
-// Presigned URL 생성 (오디오 조회용)
-const getAudioUrl = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const userId = req.user.userId;
-
-        // DB에서 오디오 정보 조회
-        const { data: audio, error } = await supabase
-            .from('user_audios')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .single();
-
-        if (error) throw error;
-
-        if (!audio) {
-            return res.status(404).json({
-                success: false,
-                error: 'Audio not found'
-            });
-        }
-
-        // S3 키 추출 (URL에서)
-        const urlParts = audio.audio_url.split('/');
-        const key = urlParts.slice(3).join('/'); // 도메인 부분 제거
-
-        // Presigned URL 생성 (1시간 유효)
-        const params = {
-            Bucket: S3_BUCKET,
-            Key: key,
-            Expires: 3600
-        };
-
-        const presignedUrl = await s3.getSignedUrlPromise('getObject', params);
-
-        res.json({
-            success: true,
-            data: {
-                ...audio,
-                presigned_url: presignedUrl
-            }
-        });
-    } catch (error) {
-        console.error('Error getting audio URL:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-};
-
-// 영구 삭제 (hard delete) - 관리자용
-const permanentDeleteAudio = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const userId = req.user.userId;
-
-        // 먼저 오디오 정보를 가져옴 (soft delete된 것도 포함)
-        const { data: audioData, error: fetchError } = await supabase
-            .from('user_audios')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .single();
-
-        if (fetchError || !audioData) {
-            return res.status(404).json({
-                success: false,
-                error: 'Audio not found'
-            });
-        }
-
-        // S3에서 파일 삭제
-        try {
-            if (audioData.audio_url && isConfigured) {
-                const urlParts = audioData.audio_url.split('/');
-                const key = urlParts.slice(3).join('/');
-
-                console.log(`🗑️ Permanently deleting S3 object: ${key}`);
-
-                await s3.deleteObject({
-                    Bucket: S3_BUCKET,
-                    Key: key
-                }).promise();
-
-                console.log(`✅ Permanently deleted S3 object: ${key}`);
-            }
-        } catch (s3Error) {
-            console.error('Error deleting from S3:', s3Error);
-            // S3 삭제 실패해도 DB에서는 삭제 진행
-        }
-
-        // DB에서 완전 삭제
-        const { error } = await supabase
-            .from('user_audios')
-            .delete()
-            .eq('id', id)
-            .eq('user_id', userId);
-
-        if (error) throw error;
-
-        res.json({
-            success: true,
-            message: 'Audio permanently deleted from both database and S3'
-        });
-    } catch (error) {
-        console.error('Error permanently deleting audio:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message
-        });
-    }
-};
-
-// 한국어 테스트 조회 API들
+// 한국어 테스트 완료 여부 조회
 const getKoreanTestStatus = async (req, res) => {
     try {
         const userId = req.user.userId;
 
-        // 사용자의 최신 완료된 한국어 테스트 조회
         const { data, error } = await supabase
             .from('korean_tests')
             .select('*')
             .eq('user_id', userId)
-            .eq('status', 'completed')
-            .order('test_date', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(1);
 
         if (error) {
-            console.error('Error fetching Korean test status:', error);
+            console.error('Database error:', error);
             return res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Failed to fetch Korean test status'
             });
         }
 
-        const hasCompletedTest = data && data.length > 0;
-        const latestTest = hasCompletedTest ? data[0] : null;
+        const latestTest = data?.[0] || null;
+        const isCompleted = latestTest && latestTest.status.includes('completed');
 
         res.json({
             success: true,
             data: {
-                korean_test_completed: hasCompletedTest,
+                korean_test_completed: isCompleted,
                 latest_test: latestTest
             }
         });
     } catch (error) {
-        console.error('Error checking Korean test status:', error);
+        console.error('Korean test status error:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: 'Korean test status check failed'
         });
     }
 };
 
+// 한국어 테스트 목록 조회
 const getKoreanTests = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { limit = 10, offset = 0 } = req.query;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = parseInt(req.query.offset) || 0;
 
         const { data, error } = await supabase
             .from('korean_tests')
             .select('*')
             .eq('user_id', userId)
-            .order('test_date', { ascending: false })
+            .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
         if (error) {
-            console.error('Error fetching Korean tests:', error);
+            console.error('Database error:', error);
             return res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Failed to fetch Korean tests'
             });
         }
 
@@ -583,14 +266,15 @@ const getKoreanTests = async (req, res) => {
             data: data || []
         });
     } catch (error) {
-        console.error('Error fetching Korean tests:', error);
+        console.error('Korean tests fetch error:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: 'Korean tests fetch failed'
         });
     }
 };
 
+// 최신 한국어 테스트 조회
 const getLatestKoreanTest = async (req, res) => {
     try {
         const userId = req.user.userId;
@@ -599,42 +283,340 @@ const getLatestKoreanTest = async (req, res) => {
             .from('korean_tests')
             .select('*')
             .eq('user_id', userId)
-            .eq('status', 'completed')
-            .order('test_date', { ascending: false })
-            .limit(1)
-            .single();
+            .order('created_at', { ascending: false })
+            .limit(1);
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
-            console.error('Error fetching latest Korean test:', error);
+        if (error) {
+            console.error('Database error:', error);
             return res.status(500).json({
                 success: false,
-                error: error.message
+                error: 'Failed to fetch latest Korean test'
             });
         }
 
         res.json({
             success: true,
-            data: data || null
+            data: data?.[0] || null
         });
     } catch (error) {
-        console.error('Error fetching latest Korean test:', error);
+        console.error('Latest Korean test fetch error:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: 'Latest Korean test fetch failed'
+        });
+    }
+};
+
+// 개별 질문별 한국어 테스트 조회
+const getKoreanTestByQuestions = async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        console.log('🎵 Fetching korean test for userId:', userId);
+
+        const { data, error } = await supabase
+            .from('korean_tests')
+            .select('question1_audio, question2_audio, question3_audio, status, score')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (error) {
+            console.error('Database error:', error);
+            return res.status(500).json({
+                success: false,
+                error: 'Failed to fetch Korean test by questions'
+            });
+        }
+
+        // 데이터가 없는 경우 처리
+        if (!data || data.length === 0) {
+            console.log('❌ No korean test found for user:', userId);
+            return res.json({
+                success: true,
+                data: null
+            });
+        }
+
+        const testData = data[0];
+
+        // Presigned URL 생성 함수
+        const generatePresignedUrl = (s3Url) => {
+            if (!s3Url) return null;
+
+            try {
+                // S3 URL에서 키 추출 (예: https://bucket.s3.region.amazonaws.com/path/to/file.m4a)
+                const urlParts = s3Url.split('/');
+                const key = urlParts.slice(3).join('/'); // 도메인 뒤의 모든 경로
+
+                console.log(`🔗 Generating presigned URL for key: ${key}`);
+
+                // Presigned URL 생성 (1시간 유효)
+                const presignedUrl = s3.getSignedUrl('getObject', {
+                    Bucket: S3_BUCKET,
+                    Key: key,
+                    Expires: 3600 // 1시간
+                });
+
+                console.log(`✅ Presigned URL generated: ${presignedUrl.substring(0, 100)}...`);
+                return presignedUrl;
+            } catch (error) {
+                console.error(`❌ Failed to generate presigned URL for: ${s3Url}`, error);
+                return s3Url; // 실패 시 원본 URL 반환
+            }
+        };
+
+        // 질문별 오디오 URL 정리 (Presigned URL로 변환)
+        const questionAudios = {
+            question1_audio: generatePresignedUrl(testData?.question1_audio),
+            question2_audio: generatePresignedUrl(testData?.question2_audio),
+            question3_audio: generatePresignedUrl(testData?.question3_audio),
+            status: testData?.status || null,
+            score: testData?.score || null
+        };
+
+        console.log('✅ Korean test data prepared with presigned URLs:', {
+            ...questionAudios,
+            question1_audio: questionAudios.question1_audio ? `${questionAudios.question1_audio.substring(0, 50)}...` : null,
+            question2_audio: questionAudios.question2_audio ? `${questionAudios.question2_audio.substring(0, 50)}...` : null,
+            question3_audio: questionAudios.question3_audio ? `${questionAudios.question3_audio.substring(0, 50)}...` : null
+        });
+
+        res.json({
+            success: true,
+            data: questionAudios
+        });
+    } catch (error) {
+        console.error('Korean test by questions fetch error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Korean test by questions fetch failed'
+        });
+    }
+};
+
+// 한국어 테스트 배치 업로드 (모든 질문을 한 번에 처리)
+const uploadKoreanTestBatch = async (req, res) => {
+    try {
+        console.log('📤 Korean test batch upload request received');
+
+        // S3 관련 설정 확인
+        if (!isConfigured) {
+            console.error('❌ S3 not configured');
+            return res.status(500).json({
+                success: false,
+                error: 'File upload service not configured'
+            });
+        }
+
+        const upload = multer({
+            storage: multerS3({
+                s3: s3,
+                bucket: S3_BUCKET,
+                metadata: function (req, file, cb) {
+                    cb(null, { fieldName: file.fieldname });
+                },
+                key: function (req, file, cb) {
+                    const userId = req.body.user_id || req.user?.userId;
+                    const timestamp = Date.now();
+                    const ext = path.extname(file.originalname) || '.m4a';
+
+                    // 파일 필드명에서 질문 번호 추출 (audio_1, audio_2, audio_3)
+                    const questionNumber = file.fieldname.split('_')[1] || '1';
+                    console.log(`🎙️ Generating S3 key for batch upload - user: ${userId}, question: ${questionNumber}, file: ${file.originalname}`);
+                    cb(null, `${S3_AUDIO_PREFIX}korean_test/${userId}/${timestamp}_q${questionNumber}${ext}`);
+                },
+                contentType: multerS3.AUTO_CONTENT_TYPE
+            }),
+            limits: {
+                fileSize: 50 * 1024 * 1024, // 50MB 제한
+            },
+            fileFilter: function (req, file, cb) {
+                console.log(`📁 Batch file filter - fieldname: ${file.fieldname}, mimetype: ${file.mimetype}, originalname: ${file.originalname}`);
+                // 오디오 파일만 허용
+                const allowedMimes = [
+                    'audio/mp4',
+                    'audio/mpeg',
+                    'audio/wav',
+                    'audio/m4a',
+                    'audio/x-m4a',
+                    'audio/aac',
+                    'audio/webm'
+                ];
+                if (allowedMimes.includes(file.mimetype)) {
+                    cb(null, true);
+                } else {
+                    console.log(`❌ File type not allowed: ${file.mimetype}`);
+                    cb(new Error('Invalid file type. Only audio files are allowed.'));
+                }
+            }
+        });
+
+        // 최대 3개 파일 업로드 (audio_1, audio_2, audio_3)
+        const uploadFields = upload.fields([
+            { name: 'audio_1', maxCount: 1 },
+            { name: 'audio_2', maxCount: 1 },
+            { name: 'audio_3', maxCount: 1 }
+        ]);
+
+        uploadFields(req, res, async (err) => {
+            if (err) {
+                console.error('Batch upload error:', err);
+                return res.status(400).json({
+                    success: false,
+                    error: err.message
+                });
+            }
+
+            try {
+                const userId = req.body.user_id || req.user.userId;
+                console.log('📊 Processing Korean test batch data:', {
+                    hasBody: !!req.body,
+                    bodyKeys: req.body ? Object.keys(req.body) : 'no body',
+                    hasFiles: !!req.files,
+                    filesKeys: req.files ? Object.keys(req.files) : 'no files',
+                    userId
+                });
+
+                if (!req.files || Object.keys(req.files).length === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'No audio files provided'
+                    });
+                }
+
+                // 업로드된 파일들에서 S3 URL 추출
+                const audioUrls = {
+                    question1_audio: null,
+                    question2_audio: null,
+                    question3_audio: null
+                };
+
+                // 각 질문별 오디오 URL 할당
+                if (req.files.audio_1 && req.files.audio_1[0]) {
+                    audioUrls.question1_audio = req.files.audio_1[0].location;
+                    console.log('✅ Question 1 uploaded:', audioUrls.question1_audio);
+                }
+                if (req.files.audio_2 && req.files.audio_2[0]) {
+                    audioUrls.question2_audio = req.files.audio_2[0].location;
+                    console.log('✅ Question 2 uploaded:', audioUrls.question2_audio);
+                }
+                if (req.files.audio_3 && req.files.audio_3[0]) {
+                    audioUrls.question3_audio = req.files.audio_3[0].location;
+                    console.log('✅ Question 3 uploaded:', audioUrls.question3_audio);
+                }
+
+                console.log('💾 Saving batch audio to database:', {
+                    userId,
+                    audioUrls
+                });
+
+                // 기존 레코드가 있는지 확인
+                const { data: existingRecords, error: selectError } = await supabase
+                    .from('korean_tests')
+                    .select('*')
+                    .eq('user_id', userId)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (selectError) {
+                    console.error('Database select error:', selectError);
+                    throw selectError;
+                }
+
+                const existingRecord = existingRecords?.[0] || null;
+
+                let result;
+                if (existingRecord) {
+                    // 기존 레코드 업데이트 (모든 질문을 한 번에)
+                    const updateData = {
+                        ...audioUrls,
+                        test_date: new Date().toISOString(),
+                        updated_at: new Date().toISOString()
+                    };
+
+                    // 모든 질문이 완료되었는지 확인
+                    const completedQuestions = Object.values(audioUrls).filter(url => url && url.trim() !== '').length;
+                    updateData.status = completedQuestions === 3 ? 'completed' : 'in_progress';
+                    updateData.questions_answered = completedQuestions;
+
+                    console.log('🔄 Updating existing record with batch data:', updateData);
+
+                    const { data: updateResult, error: updateError } = await supabase
+                        .from('korean_tests')
+                        .update(updateData)
+                        .eq('user_id', userId)
+                        .select()
+                        .single();
+
+                    if (updateError) throw updateError;
+                    result = { data: updateResult, error: null };
+                } else {
+                    // 새 레코드 생성
+                    const completedQuestions = Object.values(audioUrls).filter(url => url && url.trim() !== '').length;
+                    const koreanTestData = {
+                        user_id: userId,
+                        ...audioUrls,
+                        test_date: new Date().toISOString(),
+                        status: completedQuestions === 3 ? 'completed' : 'in_progress',
+                        duration: 15, // 질문당 15초
+                        questions_answered: completedQuestions
+                    };
+
+                    console.log('🆕 Creating new record with batch data:', koreanTestData);
+
+                    const { data: insertResult, error: insertError } = await supabase
+                        .from('korean_tests')
+                        .insert(koreanTestData)
+                        .select()
+                        .single();
+
+                    if (insertError) throw insertError;
+                    result = { data: insertResult, error: null };
+                }
+
+                const { data, error } = result;
+
+                if (error) {
+                    console.error('Database error during Korean test batch insert:', error);
+                    return res.status(500).json({
+                        success: false,
+                        error: 'Failed to save Korean test batch information to database'
+                    });
+                }
+
+                console.log('✅ Korean test batch saved successfully:', data);
+
+                res.json({
+                    success: true,
+                    data: {
+                        ...data,
+                        ...audioUrls
+                    }
+                });
+            } catch (error) {
+                console.error('Error processing Korean test batch:', error);
+                res.status(500).json({
+                    success: false,
+                    error: 'Internal server error during Korean test batch processing'
+                });
+            }
+        });
+
+    } catch (error) {
+        console.error('Korean test batch upload error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Korean test batch upload failed'
         });
     }
 };
 
 module.exports = {
-    getUploadUrl,
-    uploadAudio,
-    saveAudioInfo,
-    getUserAudios,
-    deleteAudio,
-    permanentDeleteAudio,
-    getAudioUrl,
     uploadKoreanTest,
+    uploadKoreanTestBatch,
     getKoreanTestStatus,
     getKoreanTests,
-    getLatestKoreanTest
+    getLatestKoreanTest,
+    getKoreanTestByQuestions
 };
