@@ -35,7 +35,7 @@ const getCompanyChatRooms = async (companyId) => {
                 user_info(age, university)
             ),
             job_postings(title),
-            application:applications(profile_unlocked_at)
+            application:applications(id)
         `)
         .eq('company_id', companyId)
         .eq('is_active', true)

@@ -208,19 +208,6 @@ const spendTokens = async (req, res) => {
         }
       }
 
-      // 같은 회사-사용자 조합의 모든 applications 업데이트 (호환성 유지)
-      const { error: updateError } = await supabase
-        .from('applications')
-        .update({
-          profile_unlocked_at: new Date().toISOString()
-        })
-        .eq('user_id', application.user_id)
-        .eq('company_id', companyId);
-
-      if (updateError) {
-        console.error('Application update error:', updateError);
-        // 이건 실패해도 계속 진행
-      }
 
       console.log(`Profile unlocked for company ${companyId} and user ${application.user_id}`);
     }
@@ -349,9 +336,11 @@ const getApplicants = async (req, res) => {
       query = query.eq('status', status);
     }
 
-    // 프로필 열람 여부 필터링
+    // 프로필 열람 여부 필터링 - 새로운 테이블에서 확인
     if (unlocked_only === 'true') {
-      query = query.not('profile_unlocked_at', 'is', null);
+      // company_unlocked_profiles 테이블과 조인하여 열람된 프로필만 필터링
+      query = query.innerJoin('company_unlocked_profiles', 'applications.user_id', 'company_unlocked_profiles.user_id')
+        .eq('company_unlocked_profiles.company_id', companyId);
     }
 
     const { data: applications, error } = await query;
@@ -435,8 +424,8 @@ const getApplicationByRoom = async (req, res) => {
       .eq('user_id', application.user_id)
       .single();
 
-    // 새 테이블 또는 기존 application 테이블에서 확인
-    const isProfileUnlocked = !!unlockedProfile || !!application.profile_unlocked_at;
+    // 새 테이블에서 프로필 열람 여부 확인
+    const isProfileUnlocked = !!unlockedProfile;
 
     // 프로필이 열람된 경우에만 한국어 테스트 정보 포함
     let koreanTest = null;
@@ -512,8 +501,8 @@ const getApplicantProfile = async (req, res) => {
       .eq('user_id', application.user_id)
       .single();
 
-    // 새 테이블 또는 기존 application 테이블에서 확인
-    const isProfileUnlocked = !!unlockedProfile || !!application.profile_unlocked_at;
+    // 새 테이블에서 프로필 열람 여부 확인
+    const isProfileUnlocked = !!unlockedProfile;
 
     if (!isProfileUnlocked) {
       return res.status(403).json({
