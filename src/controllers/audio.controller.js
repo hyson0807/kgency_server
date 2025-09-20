@@ -616,7 +616,7 @@ module.exports = {
     uploadKoreanTest,
     uploadKoreanTestBatch,
     getKoreanTestStatus,
-    getKoreanTests,
-    getLatestKoreanTest,
+    // getKoreanTests, // 미사용으로 주석 처리
+    // getLatestKoreanTest, // 미사용으로 주석 처리
     getKoreanTestByQuestions
 };

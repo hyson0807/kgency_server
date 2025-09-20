@@ -8,10 +8,10 @@ router.use(authMiddleware);
 
 // 한국어 테스트 관련 라우트
 router.post('/korean-test/upload', audioController.uploadKoreanTest);
-router.post('/korean-test/batch-upload', audioController.uploadKoreanTestBatch); // 새로운 배치 업로드
+router.post('/korean-test/batch-upload', audioController.uploadKoreanTestBatch);
 router.get('/korean-test/status', audioController.getKoreanTestStatus);
-router.get('/korean-test/list', audioController.getKoreanTests);
-router.get('/korean-test/latest', audioController.getLatestKoreanTest);
-router.get('/korean-test/questions/:userId', audioController.getKoreanTestByQuestions);
+// router.get('/korean-test/list', audioController.getKoreanTests); // 미사용 - 주석 처리
+// router.get('/korean-test/latest', audioController.getLatestKoreanTest); // 미사용 - 주석 처리
+router.get('/korean-test/questions/:userId', audioController.getKoreanTestByQuestions); // 채팅에서 사용
 
 module.exports = router;
