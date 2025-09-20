@@ -12,6 +12,7 @@ router.get('/company/rooms', authMiddleware, chatController.getCompanyChatRooms)
 router.get('/room/:roomId', authMiddleware, chatController.getChatRoomInfo);
 router.get('/room/:roomId/messages', authMiddleware, chatController.getChatMessages);
 router.patch('/room/:roomId/read', authMiddleware, chatController.markMessagesAsRead);
+router.get('/room/:roomId/permission', authMiddleware, chatController.checkUserChatPermission);
 router.get('/unread-count', authMiddleware, chatController.getTotalUnreadCount);
 
 module.exports = router;

@@ -360,6 +360,52 @@ const createGeneralChatRoom = async (userId, companyId) => {
     return newRoom;
 };
 
+// 구직자용 채팅 권한 확인 (company_unlocked_profiles 테이블 체크)
+const checkUserChatPermission = async (roomId, userId) => {
+    // 채팅방 정보 조회
+    const { data: roomData, error: roomError } = await supabase
+        .from('chat_rooms')
+        .select('user_id, company_id, application_id')
+        .eq('id', roomId)
+        .eq('user_id', userId)
+        .single();
+
+    if (roomError) {
+        if (roomError.code === 'PGRST116') {
+            const err = new Error('채팅방을 찾을 수 없습니다.');
+            err.code = 'ROOM_NOT_FOUND';
+            throw err;
+        }
+        throw roomError;
+    }
+
+    // 회사 ID가 있는 경우만 언락 상태 확인
+    if (roomData.company_id) {
+        const { data: unlockedProfile, error: unlockError } = await supabase
+            .from('company_unlocked_profiles')
+            .select('id, unlocked_at')
+            .eq('company_id', roomData.company_id)
+            .eq('user_id', userId)
+            .single();
+
+        if (unlockError && unlockError.code !== 'PGRST116') {
+            throw unlockError;
+        }
+
+        return {
+            canChat: !!unlockedProfile,
+            isUnlocked: !!unlockedProfile,
+            applicationId: roomData.application_id
+        };
+    }
+
+    return {
+        canChat: false,
+        isUnlocked: false,
+        applicationId: roomData.application_id
+    };
+};
+
 module.exports = {
     getUserChatRooms,
     getCompanyChatRooms,
@@ -369,5 +415,6 @@ module.exports = {
     createChatRoom,
     createGeneralChatRoom,
     getTotalUnreadCount,
-    findExistingRoom
+    findExistingRoom,
+    checkUserChatPermission
 };

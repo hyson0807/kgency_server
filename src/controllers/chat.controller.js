@@ -308,6 +308,36 @@ const createGeneralChatRoom = async (req, res) => {
     }
 };
 
+// 구직자용 채팅 권한 확인
+const checkUserChatPermission = async (req, res) => {
+    try {
+        const { roomId } = req.params;
+        const userId = req.user.userId;
+
+        const data = await chatService.checkUserChatPermission(roomId, userId);
+
+        res.json({
+            success: true,
+            data
+        });
+    } catch (error) {
+        console.error('Error in checkUserChatPermission:', error);
+
+        if (error.code === 'ROOM_NOT_FOUND') {
+            return res.status(404).json({
+                success: false,
+                error: error.message,
+                errorType: 'room_not_found'
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            error: '채팅 권한 확인 중 오류가 발생했습니다.'
+        });
+    }
+};
+
 module.exports = {
     getUserChatRooms,
     getCompanyChatRooms,
@@ -317,5 +347,6 @@ module.exports = {
     createChatRoom,
     createGeneralChatRoom,
     findExistingRoom,
-    getTotalUnreadCount
+    getTotalUnreadCount,
+    checkUserChatPermission
 };
