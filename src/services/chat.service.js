@@ -32,7 +32,7 @@ const getCompanyChatRooms = async (companyId) => {
             *,
             user:profiles!user_id(
                 name,
-                user_info(age, university)
+                user_info(age, university, country)
             ),
             job_postings(title),
             application:applications(id)
