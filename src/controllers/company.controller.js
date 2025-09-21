@@ -540,6 +540,137 @@ const getApplicantProfile = async (req, res) => {
   }
 };
 
+/**
+ * 회사 온보딩 완료
+ */
+const completeCompanyOnboarding = async (req, res) => {
+  try {
+    const companyId = req.user.userId;
+    const { companyName, address, businessNumber } = req.body;
+
+    // 입력 유효성 검사
+    if (!companyName || !address || !businessNumber) {
+      return res.status(400).json({
+        success: false,
+        error: '모든 필수 정보를 입력해주세요.'
+      });
+    }
+
+    // 현재 프로필 정보 가져오기
+    const { data: currentProfile, error: currentProfileError } = await supabase
+      .from('profiles')
+      .select('user_type')
+      .eq('id', companyId)
+      .single();
+
+    if (currentProfileError) {
+      console.error('Profile fetch error:', currentProfileError);
+      return res.status(500).json({
+        success: false,
+        error: '프로필 정보 조회 중 오류가 발생했습니다.'
+      });
+    }
+
+    // company 타입인지 확인
+    if (currentProfile.user_type !== 'company') {
+      return res.status(400).json({
+        success: false,
+        error: '회사 계정만 이 작업을 수행할 수 있습니다.'
+      });
+    }
+
+    // 이미 company_info가 존재하는지 확인
+    const { data: existingCompanyInfo, error: existingError } = await supabase
+      .from('company_info')
+      .select('id')
+      .eq('company_id', companyId)
+      .single();
+
+    if (existingError && existingError.code !== 'PGRST116') {
+      console.error('Existing company info check error:', existingError);
+      return res.status(500).json({
+        success: false,
+        error: '회사 정보 확인 중 오류가 발생했습니다.'
+      });
+    }
+
+    // 이미 존재하면 업데이트, 없으면 삽입
+    if (existingCompanyInfo) {
+      const { error: updateError } = await supabase
+        .from('company_info')
+        .update({
+          name: companyName,
+          address: address,
+          business_number: businessNumber,
+          updated_at: new Date().toISOString()
+        })
+        .eq('company_id', companyId);
+
+      if (updateError) {
+        console.error('Company info update error:', updateError);
+        return res.status(500).json({
+          success: false,
+          error: '회사 정보 업데이트 중 오류가 발생했습니다.'
+        });
+      }
+    } else {
+      // company_info 테이블에 정보 저장
+      const { error: insertError } = await supabase
+        .from('company_info')
+        .insert({
+          company_id: companyId,
+          name: companyName,
+          address: address,
+          business_number: businessNumber
+        });
+
+      if (insertError) {
+        console.error('Company info insert error:', insertError);
+        return res.status(500).json({
+          success: false,
+          error: '회사 정보 저장 중 오류가 발생했습니다.'
+        });
+      }
+    }
+
+    // profiles 테이블의 onboarding_completed를 true로 업데이트
+    const { error: profileUpdateError } = await supabase
+      .from('profiles')
+      .update({
+        onboarding_completed: true,
+        name: companyName // profiles 테이블의 name도 업데이트
+      })
+      .eq('id', companyId);
+
+    if (profileUpdateError) {
+      console.error('Profile update error:', profileUpdateError);
+      return res.status(500).json({
+        success: false,
+        error: '프로필 업데이트 중 오류가 발생했습니다.'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        message: '회사 온보딩이 완료되었습니다.',
+        company_info: {
+          name: companyName,
+          address: address,
+          business_number: businessNumber
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Company onboarding completion error:', error);
+    res.status(500).json({
+      success: false,
+      error: '회사 온보딩 완료 중 오류가 발생했습니다.'
+    });
+  }
+};
+
 module.exports = {
   getTokenInfo,
   spendTokens,
@@ -547,5 +678,6 @@ module.exports = {
   getTokenTransactions,
   getApplicants,
   getApplicantProfile,
-  getApplicationByRoom
+  getApplicationByRoom,
+  completeCompanyOnboarding
 };

@@ -17,4 +17,7 @@ router.get('/applicants', companyController.getApplicants);
 router.get('/applicants/:applicationId/profile', companyController.getApplicantProfile);
 router.get('/chat/:roomId/application', companyController.getApplicationByRoom);
 
+// 온보딩 관련 라우트
+router.post('/onboarding-complete', companyController.completeCompanyOnboarding);
+
 module.exports = router;
