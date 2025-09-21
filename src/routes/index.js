@@ -10,7 +10,6 @@ const jobPostingKeywordRoutes = require('./jobPostingKeyword.routes');
 const profileRoutes = require('./profile.routes');
 const resumeRoutes = require('./resume.routes');
 const userRoutes = require('./user.routes');
-const jobSeekerRoutes = require('./jobSeeker.routes');
 const purchaseRoutes = require('./purchase.routes');
 const appInitRoutes = require('./appInit.routes');
 const chatRoutes = require('./chat.routes');
@@ -46,8 +45,6 @@ router.use('/profiles', profileRoutes);
 // 유저 정보
 router.use('/users', userRoutes);
 
-// 구직자 목록 조회
-router.use('/job-seekers', jobSeekerRoutes);
 
 // 인앱결제
 router.use('/purchase', purchaseRoutes);
