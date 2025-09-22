@@ -177,6 +177,48 @@ const getJobSeekers = async (req, res) => {
     }
 };
 
+// 매칭된 구직자 목록 조회 (회사용) - job_seeking_active가 true인 사용자만
+const getMatchedJobSeekers = async (req, res) => {
+    try {
+        // job_seeking_active가 true인 구직자만 조회
+        const { data: jobSeekers, error } = await supabase
+            .from('profiles')
+            .select(`
+                *,
+                user_info!user_info_user_id_fkey (
+                    age,
+                    gender,
+                    visa,
+                    korean_level
+                )
+            `)
+            .eq('user_type', 'user')
+            .eq('job_seeking_active', true)  // 구직 활성화된 사용자만
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // 간단한 형식으로 변환
+        const matchedJobSeekers = jobSeekers?.map(seeker => ({
+            user: seeker,
+            matchedCount: 0,  // 적합도 계산 안함
+            matchedKeywords: [],  // 키워드 매칭 안함
+            matchedKeywordsWithCategory: []
+        })) || [];
+
+        res.json({
+            success: true,
+            data: matchedJobSeekers
+        });
+    } catch (error) {
+        console.error('매칭된 구직자 목록 조회 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '매칭된 구직자 목록을 불러오는데 실패했습니다.'
+        });
+    }
+};
+
 // 특정 사용자 프로필 조회 (회사용)
 const getUserProfile = async (req, res) => {
     try {
@@ -622,6 +664,7 @@ module.exports = {
     updateProfile,
     refreshProfile,
     getJobSeekers,
+    getMatchedJobSeekers,
     getUserProfile,
     updatePushToken: exports.updatePushToken,
     removePushToken: exports.removePushToken,
