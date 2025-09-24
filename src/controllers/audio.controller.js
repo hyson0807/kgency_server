@@ -377,7 +377,13 @@ const getKoreanTestByQuestions = async (req, res) => {
 
         const { data, error } = await supabase
             .from('korean_tests')
-            .select('question1_audio, question2_audio, question3_audio, status, score')
+            .select(`
+                question1_audio, question2_audio, question3_audio,
+                question1_ai_audio, question2_ai_audio, question3_ai_audio,
+                question1_merged_audio, question2_merged_audio, question3_merged_audio,
+                ai_voice_enabled, tts_provider,
+                status, score, duration, questions_answered
+            `)
             .eq('user_id', userId)
             .order('created_at', { ascending: false })
             .limit(1);
@@ -432,15 +438,28 @@ const getKoreanTestByQuestions = async (req, res) => {
             question1_audio: generatePresignedUrl(testData?.question1_audio),
             question2_audio: generatePresignedUrl(testData?.question2_audio),
             question3_audio: generatePresignedUrl(testData?.question3_audio),
+            question1_ai_audio: generatePresignedUrl(testData?.question1_ai_audio),
+            question2_ai_audio: generatePresignedUrl(testData?.question2_ai_audio),
+            question3_ai_audio: generatePresignedUrl(testData?.question3_ai_audio),
+            question1_merged_audio: generatePresignedUrl(testData?.question1_merged_audio),
+            question2_merged_audio: generatePresignedUrl(testData?.question2_merged_audio),
+            question3_merged_audio: generatePresignedUrl(testData?.question3_merged_audio),
+            ai_voice_enabled: testData?.ai_voice_enabled || false,
+            tts_provider: testData?.tts_provider || null,
             status: testData?.status || null,
-            score: testData?.score || null
+            score: testData?.score || null,
+            duration: testData?.duration || null,
+            questions_answered: testData?.questions_answered || null
         };
 
         console.log('✅ Korean test data prepared with presigned URLs:', {
             ...questionAudios,
             question1_audio: questionAudios.question1_audio ? `${questionAudios.question1_audio.substring(0, 50)}...` : null,
             question2_audio: questionAudios.question2_audio ? `${questionAudios.question2_audio.substring(0, 50)}...` : null,
-            question3_audio: questionAudios.question3_audio ? `${questionAudios.question3_audio.substring(0, 50)}...` : null
+            question3_audio: questionAudios.question3_audio ? `${questionAudios.question3_audio.substring(0, 50)}...` : null,
+            question1_merged_audio: questionAudios.question1_merged_audio ? `${questionAudios.question1_merged_audio.substring(0, 50)}...` : null,
+            question2_merged_audio: questionAudios.question2_merged_audio ? `${questionAudios.question2_merged_audio.substring(0, 50)}...` : null,
+            question3_merged_audio: questionAudios.question3_merged_audio ? `${questionAudios.question3_merged_audio.substring(0, 50)}...` : null
         });
 
         res.json({
@@ -882,18 +901,33 @@ const uploadAIAudio = async (req, res) => {
                 const userId = req.body.user_id || req.user.userId;
                 const testId = req.body.test_id;
                 const questionNumber = req.body.question_number;
-                const ext = path.extname(req.file.originalname) || '.m4a';
+
+                // AI 음성은 기본적으로 .mp3, 파일에서 확장자 추출 시도
+                let ext = path.extname(req.file.originalname);
+                if (!ext) {
+                    // MIME 타입에서 확장자 결정
+                    if (req.file.mimetype.includes('mp3')) {
+                        ext = '.mp3';
+                    } else if (req.file.mimetype.includes('m4a') || req.file.mimetype.includes('mp4')) {
+                        ext = '.m4a';
+                    } else {
+                        ext = '.mp3'; // 기본값
+                    }
+                }
 
                 console.log('📊 Processing AI voice data:', {
                     userId,
                     testId,
                     questionNumber,
                     fileSize: req.file.size,
-                    mimeType: req.file.mimetype
+                    mimeType: req.file.mimetype,
+                    originalName: req.file.originalname,
+                    detectedExtension: ext
                 });
 
                 // S3에 직접 업로드
                 const s3Key = `${S3_AUDIO_AI_PREFIX}${userId}/${testId}/question${questionNumber}/ai_voice${ext}`;
+                console.log(`🗂️ Generated S3 key: ${s3Key}`);
 
                 const uploadParams = {
                     Bucket: S3_BUCKET,
@@ -903,10 +937,22 @@ const uploadAIAudio = async (req, res) => {
                     // ACL 제거 - 버킷 정책으로 public access 관리
                 };
 
+                console.log(`📤 Starting S3 upload with params:`, {
+                    bucket: S3_BUCKET,
+                    key: s3Key,
+                    contentType: req.file.mimetype,
+                    bodySize: req.file.buffer.length
+                });
+
                 const uploadResult = await s3.upload(uploadParams).promise();
                 const aiAudioUrl = uploadResult.Location;
 
-                console.log(`✅ AI voice uploaded to S3: ${aiAudioUrl}`);
+                console.log(`✅ AI voice uploaded to S3 successfully:`, {
+                    url: aiAudioUrl,
+                    bucket: uploadResult.Bucket,
+                    key: uploadResult.Key,
+                    etag: uploadResult.ETag
+                });
 
                 // DB 업데이트
                 const updateData = {
@@ -915,6 +961,13 @@ const uploadAIAudio = async (req, res) => {
                     tts_provider: 'expo-speech',
                     updated_at: new Date().toISOString()
                 };
+
+                console.log(`💾 Updating database with AI voice data:`, {
+                    testId,
+                    userId,
+                    updateField: `question${questionNumber}_ai_audio`,
+                    aiAudioUrl: aiAudioUrl.substring(0, 100) + '...'
+                });
 
                 const { data, error } = await supabase
                     .from('korean_tests')
@@ -925,14 +978,25 @@ const uploadAIAudio = async (req, res) => {
                     .single();
 
                 if (error) {
-                    console.error('Database error during AI voice update:', error);
+                    console.error('❌ Database error during AI voice update:', {
+                        error,
+                        testId,
+                        userId,
+                        questionNumber
+                    });
                     return res.status(500).json({
                         success: false,
                         error: 'Failed to save AI voice information to database'
                     });
                 }
 
-                console.log('✅ AI voice saved successfully:', data);
+                console.log('✅ AI voice saved successfully to database:', {
+                    id: data.id,
+                    questionNumber,
+                    ai_voice_enabled: data.ai_voice_enabled,
+                    tts_provider: data.tts_provider,
+                    updatedField: `question${questionNumber}_ai_audio`
+                });
 
                 res.json({
                     success: true,
