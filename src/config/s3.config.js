@@ -3,7 +3,7 @@ const AWS = require('aws-sdk');
 // 환경변수 검증
 const AWS_ACCESS_KEY_ID = process.env.AWS_ACCESS_KEY_ID;
 const AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET_ACCESS_KEY;
-const AWS_REGION = process.env.AWS_REGION || 'ap-northeast-2';
+const AWS_REGION = process.env.AWS_REGION || 'ap-southeast-2';
 const S3_BUCKET = process.env.S3_BUCKET || 'kgency-storage';
 
 // S3 설정 전 환경변수 확인
@@ -23,6 +23,7 @@ const s3 = new AWS.S3({
 const S3_VIDEO_PREFIX = 'video/';
 const S3_AUDIO_PREFIX = 'record/';
 const S3_AUDIO_AI_PREFIX = 'record/korean_test_ai/';
+const S3_AUDIO_MERGED_PREFIX = 'record/korean_test_merged/';
 
 // S3 연결 테스트 (개발 환경에서만)
 if (process.env.NODE_ENV === 'development' && AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY) {
@@ -41,5 +42,6 @@ module.exports = {
     S3_VIDEO_PREFIX,
     S3_AUDIO_PREFIX,
     S3_AUDIO_AI_PREFIX,
+    S3_AUDIO_MERGED_PREFIX,
     isConfigured: !!AWS_ACCESS_KEY_ID && !!AWS_SECRET_ACCESS_KEY
 };

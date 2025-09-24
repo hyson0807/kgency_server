@@ -1,4 +1,4 @@
-const { s3, S3_BUCKET, S3_AUDIO_PREFIX, S3_AUDIO_AI_PREFIX, isConfigured } = require('../config/s3.config');
+const { s3, S3_BUCKET, S3_AUDIO_PREFIX, S3_AUDIO_AI_PREFIX, S3_AUDIO_MERGED_PREFIX, isConfigured } = require('../config/s3.config');
 const { supabase } = require('../config/database');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
@@ -6,6 +6,64 @@ const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+
+// FFmpeg 경로 설정 (환경에 따라 동적 설정)
+const setFFmpegPath = () => {
+  // 환경변수로 FFmpeg 경로가 설정된 경우 사용
+  if (process.env.FFMPEG_PATH) {
+    ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
+    console.log(`🎬 FFmpeg path set from environment: ${process.env.FFMPEG_PATH}`);
+    return;
+  }
+
+  // 개발 환경 (macOS)
+  if (process.env.NODE_ENV === 'development') {
+    const macPaths = [
+      '/opt/homebrew/bin/ffmpeg',  // Apple Silicon Mac
+      '/usr/local/bin/ffmpeg'      // Intel Mac
+    ];
+
+    for (const ffmpegPath of macPaths) {
+      if (require('fs').existsSync(ffmpegPath)) {
+        ffmpeg.setFfmpegPath(ffmpegPath);
+        console.log(`🎬 FFmpeg path set for development: ${ffmpegPath}`);
+        return;
+      }
+    }
+  }
+
+  // 배포 환경 (Render.com 포함)
+  const productionPaths = [
+    '/usr/bin/ffmpeg',      // 일반적인 Linux 경로
+    '/usr/local/bin/ffmpeg', // 컴파일 설치 경로
+    'ffmpeg'                // PATH에서 찾기 (Render에서 일반적)
+  ];
+
+  for (const ffmpegPath of productionPaths) {
+    try {
+      // Render.com에서는 보통 PATH에 ffmpeg가 있음
+      if (ffmpegPath === 'ffmpeg') {
+        // PATH에서 찾을 때는 경로 설정 없이 시도
+        console.log(`🎬 FFmpeg using system PATH (Render compatible)`);
+        return;
+      }
+
+      if (require('fs').existsSync(ffmpegPath)) {
+        ffmpeg.setFfmpegPath(ffmpegPath);
+        console.log(`🎬 FFmpeg path set for production: ${ffmpegPath}`);
+        return;
+      }
+    } catch (error) {
+      // 다음 경로 시도
+      continue;
+    }
+  }
+
+  console.warn('⚠️  FFmpeg path not found. Audio merging may not work.');
+};
+
+// FFmpeg 경로 초기화
+setFFmpegPath();
 
 // S3 업로드 설정 (한국어 테스트 전용)
 const upload = multer({
@@ -617,24 +675,9 @@ const uploadKoreanTestBatch = async (req, res) => {
 
 // ============= AI 음성 관련 함수들 =============
 
-// AI 음성 업로드 설정
+// AI 음성 업로드 설정 (메모리 스토리지로 변경)
 const uploadAIVoice = multer({
-    storage: multerS3({
-        s3: s3,
-        bucket: S3_BUCKET,
-        metadata: function (req, file, cb) {
-            cb(null, { fieldName: file.fieldname });
-        },
-        key: function (req, file, cb) {
-            const userId = req.body.user_id || req.user?.userId;
-            const testId = req.body.test_id;
-            const questionNumber = req.body.question_number;
-            const ext = path.extname(file.originalname) || '.mp3';
-            console.log(`🎙️ Generating S3 key for AI voice - user: ${userId}, test: ${testId}, question: ${questionNumber}`);
-            cb(null, `${S3_AUDIO_AI_PREFIX}${userId}/${testId}/question${questionNumber}/ai_voice${ext}`);
-        },
-        contentType: multerS3.AUTO_CONTENT_TYPE
-    }),
+    storage: multer.memoryStorage(), // 메모리에 임시 저장
     limits: {
         fileSize: 10 * 1024 * 1024, // 10MB 제한 (AI 음성은 더 작음)
     },
@@ -661,8 +704,10 @@ const uploadAIVoice = multer({
  */
 const downloadFromS3 = async (s3Url) => {
     try {
+        console.log(`📥 S3 다운로드 시작: ${s3Url}`);
         const url = new URL(s3Url);
         const key = url.pathname.substring(1); // 첫 번째 '/' 제거
+        console.log(`🔑 추출된 S3 키: ${key}`);
 
         const tempFileName = `temp_${uuidv4()}.mp3`;
         const tempDir = path.join(__dirname, '../../temp');
@@ -678,13 +723,15 @@ const downloadFromS3 = async (s3Url) => {
             Key: key
         };
 
+        console.log(`⬇️ S3 다운로드 파라미터:`, params);
         const data = await s3.getObject(params).promise();
         fs.writeFileSync(tempPath, data.Body);
 
+        console.log(`✅ S3 다운로드 성공: ${tempPath}`);
         return tempPath;
     } catch (error) {
-        console.error('S3 다운로드 오류:', error);
-        throw new Error('S3 파일 다운로드 실패');
+        console.error(`❌ S3 다운로드 오류 (URL: ${s3Url}):`, error);
+        throw new Error(`S3 파일 다운로드 실패: ${error.message}`);
     }
 };
 
@@ -699,8 +746,8 @@ const uploadToS3 = async (filePath, s3Key) => {
             Bucket: S3_BUCKET,
             Key: s3Key,
             Body: fileContent,
-            ContentType: 'audio/mpeg',
-            ACL: 'public-read'
+            ContentType: 'audio/mpeg'
+            // ACL 제거 - 버킷 정책으로 public access 관리
         };
 
         const result = await s3.upload(params).promise();
@@ -712,33 +759,92 @@ const uploadToS3 = async (filePath, s3Key) => {
 };
 
 /**
- * 무음 파일 생성
+ * 무음 파일 생성 (WAV → MP3 변환 방식)
  */
-const createSilenceFile = (duration = 1) => {
-    return new Promise((resolve, reject) => {
-        const tempDir = path.join(__dirname, '../../temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
+const createSilenceFile = async (duration = 1) => {
+    const tempDir = path.join(__dirname, '../../temp');
+    if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    const silenceWavFile = path.join(tempDir, `silence_${duration}s_${uuidv4()}.wav`);
+    const silenceMp3File = path.join(tempDir, `silence_${duration}s_${uuidv4()}.mp3`);
+
+    try {
+        // WAV 파일 생성 (16-bit, 22050Hz, mono, 1초 무음)
+        const sampleRate = 22050;
+        const samples = sampleRate * duration; // 22050 samples for 1 second
+        const dataSize = samples * 2; // 16-bit = 2 bytes per sample
+        const fileSize = 36 + dataSize;
+
+        const buffer = Buffer.alloc(44 + dataSize); // WAV header (44 bytes) + data
+        let offset = 0;
+
+        // WAV header
+        buffer.write('RIFF', offset); offset += 4;
+        buffer.writeUInt32LE(fileSize, offset); offset += 4;
+        buffer.write('WAVE', offset); offset += 4;
+        buffer.write('fmt ', offset); offset += 4;
+        buffer.writeUInt32LE(16, offset); offset += 4; // PCM format size
+        buffer.writeUInt16LE(1, offset); offset += 2;  // PCM format
+        buffer.writeUInt16LE(1, offset); offset += 2;  // mono
+        buffer.writeUInt32LE(sampleRate, offset); offset += 4; // sample rate
+        buffer.writeUInt32LE(sampleRate * 2, offset); offset += 4; // byte rate
+        buffer.writeUInt16LE(2, offset); offset += 2;  // block align
+        buffer.writeUInt16LE(16, offset); offset += 2; // bits per sample
+        buffer.write('data', offset); offset += 4;
+        buffer.writeUInt32LE(dataSize, offset); offset += 4;
+
+        // Data section (all zeros for silence)
+        buffer.fill(0, offset);
+
+        fs.writeFileSync(silenceWavFile, buffer);
+
+        // FFmpeg 경로 초기화
+        setFFmpegPath();
+
+        // WAV를 MP3로 변환
+        await new Promise((resolve, reject) => {
+            ffmpeg(silenceWavFile)
+                .audioCodec('libmp3lame')
+                .audioBitrate('64k')
+                .audioChannels(1)
+                .audioFrequency(22050)
+                .output(silenceMp3File)
+                .on('error', (error) => {
+                    console.error('WAV → MP3 변환 오류:', error);
+                    reject(error);
+                })
+                .on('end', () => {
+                    console.log(`✅ 무음 파일 생성 완료: ${duration}초 (WAV → MP3 변환)`);
+
+                    // WAV 파일 삭제
+                    try {
+                        fs.unlinkSync(silenceWavFile);
+                    } catch (e) {
+                        console.warn('WAV 파일 삭제 실패:', e.message);
+                    }
+
+                    resolve();
+                })
+                .run();
+        });
+
+        return silenceMp3File;
+
+    } catch (error) {
+        console.error('무음 파일 생성 실패:', error);
+
+        // 정리
+        try {
+            if (fs.existsSync(silenceWavFile)) fs.unlinkSync(silenceWavFile);
+            if (fs.existsSync(silenceMp3File)) fs.unlinkSync(silenceMp3File);
+        } catch (e) {
+            console.warn('임시 파일 정리 실패:', e.message);
         }
 
-        const silenceFile = path.join(tempDir, `silence_${duration}s_${uuidv4()}.mp3`);
-
-        ffmpeg()
-            .input('anullsrc=channel_layout=mono:sample_rate=22050')
-            .inputFormat('lavfi')
-            .audioCodec('libmp3lame')
-            .audioBitrate('64k')
-            .duration(duration)
-            .output(silenceFile)
-            .on('error', (err) => {
-                console.error('무음 파일 생성 오류:', err);
-                reject(err);
-            })
-            .on('end', () => {
-                resolve(silenceFile);
-            })
-            .run();
-    });
+        throw error;
+    }
 };
 
 /**
@@ -776,16 +882,31 @@ const uploadAIAudio = async (req, res) => {
                 const userId = req.body.user_id || req.user.userId;
                 const testId = req.body.test_id;
                 const questionNumber = req.body.question_number;
+                const ext = path.extname(req.file.originalname) || '.m4a';
 
                 console.log('📊 Processing AI voice data:', {
                     userId,
                     testId,
                     questionNumber,
-                    fileLocation: req.file?.location
+                    fileSize: req.file.size,
+                    mimeType: req.file.mimetype
                 });
 
-                // S3 URL
-                const aiAudioUrl = req.file.location;
+                // S3에 직접 업로드
+                const s3Key = `${S3_AUDIO_AI_PREFIX}${userId}/${testId}/question${questionNumber}/ai_voice${ext}`;
+
+                const uploadParams = {
+                    Bucket: S3_BUCKET,
+                    Key: s3Key,
+                    Body: req.file.buffer,
+                    ContentType: req.file.mimetype
+                    // ACL 제거 - 버킷 정책으로 public access 관리
+                };
+
+                const uploadResult = await s3.upload(uploadParams).promise();
+                const aiAudioUrl = uploadResult.Location;
+
+                console.log(`✅ AI voice uploaded to S3: ${aiAudioUrl}`);
 
                 // DB 업데이트
                 const updateData = {
@@ -873,7 +994,12 @@ const mergeAudioFiles = async (req, res) => {
 
         // FFmpeg로 오디오 합성
         await new Promise((resolve, reject) => {
-            ffmpeg()
+            const ffmpegCommand = ffmpeg();
+
+            // FFmpeg 경로 초기화 (전역 함수 사용)
+            setFFmpegPath();
+
+            ffmpegCommand
                 .input(aiAudioPath)
                 .input(silencePath)
                 .input(userAudioPath)
@@ -899,7 +1025,7 @@ const mergeAudioFiles = async (req, res) => {
 
         // 합성된 파일을 S3에 업로드
         const userId = req.user?.userId;
-        const s3Key = `${S3_AUDIO_AI_PREFIX}${userId}/${testId}/question${questionNumber}/merged.mp3`;
+        const s3Key = `${S3_AUDIO_MERGED_PREFIX}${userId}/${testId}/question${questionNumber}/merged.mp3`;
         const mergedUrl = await uploadToS3(mergedPath, s3Key);
 
         // DB 업데이트
@@ -971,6 +1097,13 @@ const mergeAudioFilesBatch = async (req, res) => {
         // 각 질문별로 순차적으로 합성
         for (const item of audioData) {
             try {
+                console.log(`🔄 질문 ${item.questionNumber} 합성 시작:`, {
+                    aiAudioUrl: item.aiAudioUrl,
+                    userAudioUrl: item.userAudioUrl,
+                    questionNumber: item.questionNumber,
+                    testId
+                });
+
                 // 개별 합성 로직 실행
                 const mergeResult = await new Promise((resolve, reject) => {
                     const mockReq = {
@@ -1019,7 +1152,12 @@ const mergeAudioFilesBatch = async (req, res) => {
 
                             // FFmpeg로 오디오 합성
                             await new Promise((resolve, reject) => {
-                                ffmpeg()
+                                const ffmpegCommand = ffmpeg();
+
+                                // FFmpeg 경로 초기화 (전역 함수 사용)
+                                setFFmpegPath();
+
+                                ffmpegCommand
                                     .input(aiAudioPath)
                                     .input(silencePath)
                                     .input(userAudioPath)
@@ -1039,7 +1177,7 @@ const mergeAudioFilesBatch = async (req, res) => {
 
                             // 합성된 파일을 S3에 업로드
                             const userId = req.user?.userId;
-                            const s3Key = `${S3_AUDIO_AI_PREFIX}${userId}/${testId}/question${questionNumber}/merged.mp3`;
+                            const s3Key = `${S3_AUDIO_MERGED_PREFIX}${userId}/${testId}/question${questionNumber}/merged.mp3`;
                             const mergedUrl = await uploadToS3(mergedPath, s3Key);
 
                             // DB 업데이트

@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: kgency-server
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FFMPEG_PATH
+        value: ffmpeg  # Render에서는 PATH에 ffmpeg가 있음
+    # Render에서 FFmpeg 사용을 위한 시스템 패키지 설치
+    buildScript: |
+      # FFmpeg는 Render에서 기본 제공됨
+      echo "FFmpeg should be available in system PATH"
