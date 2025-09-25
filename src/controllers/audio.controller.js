@@ -1068,7 +1068,8 @@ const mergeAudioFiles = async (req, res) => {
                 .input(silencePath)
                 .input(userAudioPath)
                 .complexFilter([
-                    '[0:a][1:a][2:a]concat=n=3:v=0:a=1[out]'
+                    '[0:a]volume=2.5[ai_amplified]',
+                    '[ai_amplified][1:a][2:a]concat=n=3:v=0:a=1[out]'
                 ])
                 .outputOptions(['-map', '[out]'])
                 .audioCodec('libmp3lame')
@@ -1226,7 +1227,8 @@ const mergeAudioFilesBatch = async (req, res) => {
                                     .input(silencePath)
                                     .input(userAudioPath)
                                     .complexFilter([
-                                        '[0:a][1:a][2:a]concat=n=3:v=0:a=1[out]'
+                                        '[0:a]volume=2.5[ai_amplified]',
+                                        '[ai_amplified][1:a][2:a]concat=n=3:v=0:a=1[out]'
                                     ])
                                     .outputOptions(['-map', '[out]'])
                                     .audioCodec('libmp3lame')
