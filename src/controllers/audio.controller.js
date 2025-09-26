@@ -1,69 +1,23 @@
-const { s3, S3_BUCKET, S3_AUDIO_PREFIX, S3_AUDIO_AI_PREFIX, S3_AUDIO_MERGED_PREFIX, isConfigured } = require('../config/s3.config');
+const { s3, S3_BUCKET, S3_AUDIO_PREFIX, isConfigured } = require('../config/s3.config');
+// DEPRECATED: S3_AUDIO_AI_PREFIX, S3_AUDIO_MERGED_PREFIX - 더이상 사용안함
 const { supabase } = require('../config/database');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const path = require('path');
-const ffmpeg = require('fluent-ffmpeg');
-const fs = require('fs');
-const { v4: uuidv4 } = require('uuid');
+// DEPRECATED: ffmpeg, fs, uuid - 오디오 병합 기능 제거로 더이상 사용안함
+// const ffmpeg = require('fluent-ffmpeg');
+// const fs = require('fs');
+// const { v4: uuidv4 } = require('uuid');
 
-// FFmpeg 경로 설정 (환경에 따라 동적 설정)
+/*
+// DEPRECATED: FFmpeg 설정 코드 (오디오 병합 기능 제거로 더이상 필요없음)
 const setFFmpegPath = () => {
-  // 환경변수로 FFmpeg 경로가 설정된 경우 사용
-  if (process.env.FFMPEG_PATH) {
-    ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
-    console.log(`🎬 FFmpeg path set from environment: ${process.env.FFMPEG_PATH}`);
-    return;
-  }
-
-  // 개발 환경 (macOS)
-  if (process.env.NODE_ENV === 'development') {
-    const macPaths = [
-      '/opt/homebrew/bin/ffmpeg',  // Apple Silicon Mac
-      '/usr/local/bin/ffmpeg'      // Intel Mac
-    ];
-
-    for (const ffmpegPath of macPaths) {
-      if (require('fs').existsSync(ffmpegPath)) {
-        ffmpeg.setFfmpegPath(ffmpegPath);
-        console.log(`🎬 FFmpeg path set for development: ${ffmpegPath}`);
-        return;
-      }
-    }
-  }
-
-  // 배포 환경 (Render.com 포함)
-  const productionPaths = [
-    '/usr/bin/ffmpeg',      // 일반적인 Linux 경로
-    '/usr/local/bin/ffmpeg', // 컴파일 설치 경로
-    'ffmpeg'                // PATH에서 찾기 (Render에서 일반적)
-  ];
-
-  for (const ffmpegPath of productionPaths) {
-    try {
-      // Render.com에서는 보통 PATH에 ffmpeg가 있음
-      if (ffmpegPath === 'ffmpeg') {
-        // PATH에서 찾을 때는 경로 설정 없이 시도
-        console.log(`🎬 FFmpeg using system PATH (Render compatible)`);
-        return;
-      }
-
-      if (require('fs').existsSync(ffmpegPath)) {
-        ffmpeg.setFfmpegPath(ffmpegPath);
-        console.log(`🎬 FFmpeg path set for production: ${ffmpegPath}`);
-        return;
-      }
-    } catch (error) {
-      // 다음 경로 시도
-      continue;
-    }
-  }
-
-  console.warn('⚠️  FFmpeg path not found. Audio merging may not work.');
+  // ... (기존 FFmpeg 설정 코드들)
 };
 
 // FFmpeg 경로 초기화
 setFFmpegPath();
+*/
 
 // S3 업로드 설정 (한국어 테스트 전용)
 const upload = multer({
@@ -379,9 +333,6 @@ const getKoreanTestByQuestions = async (req, res) => {
             .from('korean_tests')
             .select(`
                 question1_audio, question2_audio, question3_audio,
-                question1_ai_audio, question2_ai_audio, question3_ai_audio,
-                question1_merged_audio, question2_merged_audio, question3_merged_audio,
-                ai_voice_enabled, tts_provider,
                 status, score, duration, questions_answered
             `)
             .eq('user_id', userId)
@@ -438,14 +389,6 @@ const getKoreanTestByQuestions = async (req, res) => {
             question1_audio: generatePresignedUrl(testData?.question1_audio),
             question2_audio: generatePresignedUrl(testData?.question2_audio),
             question3_audio: generatePresignedUrl(testData?.question3_audio),
-            question1_ai_audio: generatePresignedUrl(testData?.question1_ai_audio),
-            question2_ai_audio: generatePresignedUrl(testData?.question2_ai_audio),
-            question3_ai_audio: generatePresignedUrl(testData?.question3_ai_audio),
-            question1_merged_audio: generatePresignedUrl(testData?.question1_merged_audio),
-            question2_merged_audio: generatePresignedUrl(testData?.question2_merged_audio),
-            question3_merged_audio: generatePresignedUrl(testData?.question3_merged_audio),
-            ai_voice_enabled: testData?.ai_voice_enabled || false,
-            tts_provider: testData?.tts_provider || null,
             status: testData?.status || null,
             score: testData?.score || null,
             duration: testData?.duration || null,
@@ -456,10 +399,7 @@ const getKoreanTestByQuestions = async (req, res) => {
             ...questionAudios,
             question1_audio: questionAudios.question1_audio ? `${questionAudios.question1_audio.substring(0, 50)}...` : null,
             question2_audio: questionAudios.question2_audio ? `${questionAudios.question2_audio.substring(0, 50)}...` : null,
-            question3_audio: questionAudios.question3_audio ? `${questionAudios.question3_audio.substring(0, 50)}...` : null,
-            question1_merged_audio: questionAudios.question1_merged_audio ? `${questionAudios.question1_merged_audio.substring(0, 50)}...` : null,
-            question2_merged_audio: questionAudios.question2_merged_audio ? `${questionAudios.question2_merged_audio.substring(0, 50)}...` : null,
-            question3_merged_audio: questionAudios.question3_merged_audio ? `${questionAudios.question3_merged_audio.substring(0, 50)}...` : null
+            question3_audio: questionAudios.question3_audio ? `${questionAudios.question3_audio.substring(0, 50)}...` : null
         });
 
         res.json({
@@ -866,9 +806,9 @@ const createSilenceFile = async (duration = 1) => {
     }
 };
 
-/**
- * AI 음성 업로드
- */
+/*
+// DEPRECATED: AI 음성 업로드 (더이상 사용안함 - 2024.12)
+// 클라이언트에서 로컬 assets 사용으로 변경됨
 const uploadAIAudio = async (req, res) => {
     try {
         console.log('📤 AI voice upload request received');
@@ -1022,10 +962,11 @@ const uploadAIAudio = async (req, res) => {
         });
     }
 };
+*/
 
-/**
- * 오디오 파일 합성
- */
+/*
+// DEPRECATED: 오디오 파일 합성 (더이상 사용안함 - 2024.12)
+// 클라이언트에서 순차 재생으로 변경됨
 const mergeAudioFiles = async (req, res) => {
     let tempFiles = [];
 
@@ -1135,10 +1076,11 @@ const mergeAudioFiles = async (req, res) => {
         });
     }
 };
+*/
 
-/**
- * 배치 오디오 합성 (3개 질문 한 번에)
- */
+/*
+// DEPRECATED: 배치 오디오 합성 (더이상 사용안함 - 2024.12)
+// 클라이언트에서 순차 재생으로 변경됨
 const mergeAudioFilesBatch = async (req, res) => {
     try {
         const { testId, audioData } = req.body;
@@ -1308,6 +1250,7 @@ const mergeAudioFilesBatch = async (req, res) => {
         });
     }
 };
+*/
 
 /**
  * 오디오 파일 정보 조회
@@ -1321,17 +1264,9 @@ const getAudioInfo = async (req, res) => {
             .from('korean_tests')
             .select(`
                 id,
-                question1_ai_audio,
-                question2_ai_audio,
-                question3_ai_audio,
                 question1_audio,
                 question2_audio,
-                question3_audio,
-                question1_merged_audio,
-                question2_merged_audio,
-                question3_merged_audio,
-                ai_voice_enabled,
-                tts_provider
+                question3_audio
             `)
             .eq('id', testId)
             .eq('user_id', userId)
@@ -1369,9 +1304,9 @@ module.exports = {
     // getKoreanTests, // 미사용으로 주석 처리
     // getLatestKoreanTest, // 미사용으로 주석 처리
     getKoreanTestByQuestions,
-    // AI 음성 관련 새로운 함수들
-    uploadAIAudio,
-    mergeAudioFiles,
-    mergeAudioFilesBatch,
+    // DEPRECATED: AI 음성 관련 함수들 (더이상 사용안함 - 2024.12)
+    // uploadAIAudio,
+    // mergeAudioFiles,
+    // mergeAudioFilesBatch,
     getAudioInfo
 };
