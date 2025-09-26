@@ -632,7 +632,9 @@ const uploadKoreanTestBatch = async (req, res) => {
     }
 };
 
-// ============= AI 음성 관련 함수들 =============
+/*
+// DEPRECATED: AI 음성 관련 함수들 (더이상 사용안함 - 2024.12)
+// 오디오 병합 기능 제거로 이 함수들도 불필요
 
 // AI 음성 업로드 설정 (메모리 스토리지로 변경)
 const uploadAIVoice = multer({
@@ -805,6 +807,7 @@ const createSilenceFile = async (duration = 1) => {
         throw error;
     }
 };
+*/
 
 /*
 // DEPRECATED: AI 음성 업로드 (더이상 사용안함 - 2024.12)
