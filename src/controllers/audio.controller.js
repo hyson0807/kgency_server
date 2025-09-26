@@ -807,7 +807,6 @@ const createSilenceFile = async (duration = 1) => {
         throw error;
     }
 };
-*/
 
 /*
 // DEPRECATED: AI 음성 업로드 (더이상 사용안함 - 2024.12)
