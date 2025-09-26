@@ -659,6 +659,57 @@ const getUniversities = async (req, res) => {
     }
 };
 
+// 구직 활성화 상태 토글
+const toggleJobSeekingActive = async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        // 현재 프로필 정보 가져오기
+        const { data: currentProfile, error: currentProfileError } = await supabase
+            .from('profiles')
+            .select('user_type, job_seeking_active')
+            .eq('id', userId)
+            .single();
+
+        if (currentProfileError) {
+            throw currentProfileError;
+        }
+
+        if (currentProfile.user_type !== 'user') {
+            return res.status(400).json({
+                success: false,
+                error: '구직자만 구직 활성화 상태를 변경할 수 있습니다.'
+            });
+        }
+
+        // 현재 상태의 반대로 토글
+        const newStatus = !currentProfile.job_seeking_active;
+
+        // job_seeking_active 상태 업데이트
+        const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ job_seeking_active: newStatus })
+            .eq('id', userId);
+
+        if (updateError) throw updateError;
+
+        res.json({
+            success: true,
+            data: {
+                job_seeking_active: newStatus
+            },
+            message: `구직 활성화 상태가 ${newStatus ? '활성화' : '비활성화'}되었습니다.`
+        });
+
+    } catch (error) {
+        console.error('구직 활성화 상태 토글 실패:', error);
+        res.status(500).json({
+            success: false,
+            error: '구직 활성화 상태 변경에 실패했습니다.'
+        });
+    }
+};
+
 module.exports = {
     getProfile,
     updateProfile,
@@ -672,5 +723,6 @@ module.exports = {
     updateProfileImage,
     deleteProfileImage,
     completeOnboarding,
-    getUniversities
+    getUniversities,
+    toggleJobSeekingActive
 };

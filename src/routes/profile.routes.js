@@ -41,4 +41,7 @@ router.post('/onboarding-complete', authMiddleware, profileController.completeOn
 // GET /api/profiles/universities - Get university list
 router.get('/universities', profileController.getUniversities);
 
+// POST /api/profiles/toggle-job-seeking - Toggle job seeking active status
+router.post('/toggle-job-seeking', authMiddleware, profileController.toggleJobSeekingActive);
+
 module.exports = router;
