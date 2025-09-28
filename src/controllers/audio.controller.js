@@ -1299,6 +1299,229 @@ const getAudioInfo = async (req, res) => {
     }
 };
 
+// 질문 오디오 파일을 S3에 업로드하는 함수 (개발/관리용)
+const uploadQuestionAudio = async (req, res) => {
+    try {
+        console.log('📤 Question audio upload request received');
+
+        // S3 관련 설정 확인
+        if (!isConfigured) {
+            console.error('❌ S3 not configured');
+            return res.status(500).json({
+                success: false,
+                error: 'File upload service not configured'
+            });
+        }
+
+        // 질문 오디오 업로드 설정
+        const uploadQuestionFile = multer({
+            storage: multerS3({
+                s3: s3,
+                bucket: S3_BUCKET,
+                metadata: function (req, file, cb) {
+                    cb(null, { fieldName: file.fieldname });
+                },
+                key: function (req, file, cb) {
+                    const questionNumber = req.body.question_number || file.fieldname.replace('question', '');
+                    console.log(`🎙️ Generating S3 key for question ${questionNumber}: record/question/question${questionNumber}.mp3`);
+                    cb(null, `record/question/question${questionNumber}.mp3`);
+                },
+                contentType: multerS3.AUTO_CONTENT_TYPE
+            }),
+            limits: {
+                fileSize: 50 * 1024 * 1024, // 50MB 제한
+            },
+            fileFilter: function (req, file, cb) {
+                console.log(`📁 Question file filter - fieldname: ${file.fieldname}, mimetype: ${file.mimetype}`);
+                // 오디오 파일만 허용
+                const allowedMimes = [
+                    'audio/mp4',
+                    'audio/mpeg',
+                    'audio/wav',
+                    'audio/m4a',
+                    'audio/x-m4a',
+                    'audio/aac',
+                    'audio/webm'
+                ];
+                if (allowedMimes.includes(file.mimetype)) {
+                    cb(null, true);
+                } else {
+                    console.log(`❌ File type not allowed: ${file.mimetype}`);
+                    cb(new Error('Invalid file type. Only audio files are allowed.'));
+                }
+            }
+        });
+
+        // 3개 질문 파일 업로드 지원
+        const uploadFields = uploadQuestionFile.fields([
+            { name: 'question1', maxCount: 1 },
+            { name: 'question2', maxCount: 1 },
+            { name: 'question3', maxCount: 1 }
+        ]);
+
+        uploadFields(req, res, async (err) => {
+            if (err) {
+                console.error('Question upload error:', err);
+                return res.status(400).json({
+                    success: false,
+                    error: err.message
+                });
+            }
+
+            try {
+                if (!req.files || Object.keys(req.files).length === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'No question audio files provided'
+                    });
+                }
+
+                const uploadedFiles = {};
+                const results = [];
+
+                // 각 질문 파일 처리
+                for (const [fieldName, fileArray] of Object.entries(req.files)) {
+                    if (fileArray && fileArray[0]) {
+                        const file = fileArray[0];
+                        const questionNumber = fieldName.replace('question', '');
+
+                        console.log(`✅ Question ${questionNumber} uploaded:`, {
+                            originalName: file.originalname,
+                            size: file.size,
+                            location: file.location
+                        });
+
+                        uploadedFiles[fieldName] = file.location;
+                        results.push({
+                            questionNumber: parseInt(questionNumber),
+                            success: true,
+                            url: file.location,
+                            size: file.size
+                        });
+                    }
+                }
+
+                console.log('✅ Question audio files uploaded successfully:', uploadedFiles);
+
+                res.json({
+                    success: true,
+                    message: `${results.length} question audio files uploaded successfully`,
+                    files: results
+                });
+
+            } catch (error) {
+                console.error('Error processing question audio upload:', error);
+                res.status(500).json({
+                    success: false,
+                    error: 'Internal server error during question audio upload'
+                });
+            }
+        });
+
+    } catch (error) {
+        console.error('Question audio upload error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Question audio upload failed'
+        });
+    }
+};
+
+// 질문 오디오 URL 제공 (S3 Presigned URL)
+const getQuestionAudio = async (req, res) => {
+    try {
+        const { questionNumber } = req.params;
+
+        if (!questionNumber || questionNumber < 1 || questionNumber > 3) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid question number. Must be 1, 2, or 3.'
+            });
+        }
+
+        // S3 관련 설정 확인
+        if (!isConfigured) {
+            console.error('❌ S3 not configured');
+            return res.status(500).json({
+                success: false,
+                error: 'Audio service not configured'
+            });
+        }
+
+        try {
+            // S3 키 생성 (record/question/question1.mp3, question2.mp3, question3.mp3)
+            const s3Key = `record/question/question${questionNumber}.mp3`;
+
+            console.log(`🎵 Generating presigned URL for question ${questionNumber}:`, {
+                bucket: S3_BUCKET,
+                key: s3Key,
+                region: s3.config.region
+            });
+
+            // 먼저 파일이 존재하는지 확인
+            try {
+                await s3.headObject({
+                    Bucket: S3_BUCKET,
+                    Key: s3Key
+                }).promise();
+                console.log(`✅ Question ${questionNumber} file exists in S3`);
+            } catch (headError) {
+                console.error(`❌ Question ${questionNumber} file not found in S3:`, {
+                    bucket: S3_BUCKET,
+                    key: s3Key,
+                    error: headError.code || headError.message
+                });
+                return res.status(404).json({
+                    success: false,
+                    error: `Question audio file not found: ${s3Key}`,
+                    details: headError.code || headError.message
+                });
+            }
+
+            // TEMPORARY FIX: Use direct S3 URL instead of presigned URL due to presigned URL generation issues
+            // TODO: Fix presigned URL generation issue later
+            const generateDirectS3Url = (s3Key) => {
+                try {
+                    console.log(`🔗 Generating direct S3 URL for key: ${s3Key}`);
+
+                    // Use direct S3 URL - files are publicly accessible
+                    const directUrl = `https://${S3_BUCKET}.s3.${s3.config.region}.amazonaws.com/${s3Key}`;
+
+                    console.log(`✅ Direct S3 URL generated: ${directUrl.substring(0, 100)}...`);
+                    return directUrl;
+                } catch (error) {
+                    console.error(`❌ Failed to generate direct S3 URL for: ${s3Key}`, error);
+                    throw error;
+                }
+            };
+
+            const audioUrl = generateDirectS3Url(s3Key);
+
+            res.json({
+                success: true,
+                audioUrl: audioUrl,
+                questionNumber: parseInt(questionNumber),
+                expiresIn: null, // Direct URL doesn't expire
+                s3Key: s3Key
+            });
+
+        } catch (error) {
+            console.error(`❌ Failed to generate presigned URL for question ${questionNumber}:`, error);
+            res.status(500).json({
+                success: false,
+                error: 'Failed to generate audio URL',
+                details: error.message
+            });
+        }
+    } catch (error) {
+        console.error('Question audio error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Question audio request failed'
+        });
+    }
+};
+
 module.exports = {
     uploadKoreanTest,
     uploadKoreanTestBatch,
@@ -1306,6 +1529,8 @@ module.exports = {
     // getKoreanTests, // 미사용으로 주석 처리
     // getLatestKoreanTest, // 미사용으로 주석 처리
     getKoreanTestByQuestions,
+    getQuestionAudio, // 새로 추가된 함수
+    uploadQuestionAudio, // 관리용 질문 오디오 업로드 함수
     // DEPRECATED: AI 음성 관련 함수들 (더이상 사용안함 - 2024.12)
     // uploadAIAudio,
     // mergeAudioFiles,
