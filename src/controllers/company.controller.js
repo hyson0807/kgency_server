@@ -398,6 +398,7 @@ const getApplicationByRoom = async (req, res) => {
           id,
           name,
           profile_image_url,
+          phone_number,
           user_info(*)
         ),
         job_posting:job_postings!job_posting_id(
