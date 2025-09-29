@@ -41,8 +41,7 @@ const generateResume = async (data) => {
       *,
       company:company_id (
         name,
-        address,
-        description
+        address
       )
     `)
         .eq('id', job_posting_id)

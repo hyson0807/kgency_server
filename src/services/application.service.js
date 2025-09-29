@@ -9,8 +9,7 @@ exports.getApplication = async (id) => {
                 job_posting: job_posting_id (
                     id,
                     title,
-                    description,
-                    job_address,   
+                    job_address,
                     is_active,
                     deleted_at,
                     company: company_id (

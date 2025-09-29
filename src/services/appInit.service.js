@@ -263,7 +263,17 @@ const getUserProfile = async (userId) => {
     const { data, error } = await supabase
       .from('profiles')
       .select(`
-        *,
+        id,
+        name,
+        created_at,
+        user_type,
+        address,
+        phone_number,
+        onboarding_completed,
+        job_seeking_active,
+        push_token,
+        push_token_updated_at,
+        profile_image_url,
         user_info (*)
       `)
       .eq('id', userId)
@@ -339,7 +349,7 @@ const getCompanyProfile = async (companyId) => {
   return await withDatabaseRetry(async () => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*')
+      .select('id, name, created_at, user_type, address, phone_number, onboarding_completed, job_seeking_active, push_token, push_token_updated_at, profile_image_url')
       .eq('id', companyId)
       .single();
 
