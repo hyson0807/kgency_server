@@ -16,7 +16,7 @@ const sendOTP = async (req, res) => {
 
         res.json({
             success: true,
-            ...result
+            data: result
         });
 
     } catch (error) {
@@ -44,7 +44,7 @@ const verifyOTP = async (req, res) => {
 
         res.json({
             success: true,
-            ...result
+            data: result
         });
 
     } catch (error) {
@@ -87,7 +87,7 @@ const deleteAccount = async (req, res) => {
 
         res.json({
             success: true,
-            ...result
+            data: result
         });
 
     } catch (error) {
