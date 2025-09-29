@@ -25,12 +25,12 @@ const S3_AUDIO_PREFIX = 'record/';
 const S3_AUDIO_AI_PREFIX = 'record/korean_test_ai/';
 const S3_AUDIO_MERGED_PREFIX = 'record/korean_test_merged/';
 
-// S3 연결 테스트 (개발 환경에서만)
+// S3 연결 테스트 (개발 환경에서만, 조용히 실행)
 if (process.env.NODE_ENV === 'development' && AWS_ACCESS_KEY_ID && AWS_SECRET_ACCESS_KEY) {
     s3.headBucket({ Bucket: S3_BUCKET }, (err, data) => {
         if (err) {
             console.error('❌ S3 bucket access failed:', err.message);
-        } else {
+        } else if (process.env.DEBUG_S3) {
             console.log('✅ S3 bucket connection successful');
         }
     });

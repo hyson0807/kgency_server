@@ -21,11 +21,11 @@ class CacheManager {
       const isRender = process.env.RENDER || process.env.RENDER_SERVICE_ID;
       const redisUrl = process.env.REDIS_URL;
       
-      if (isDevelopment) {
+      if (isDevelopment && process.env.DEBUG_REDIS) {
         console.log('🔧 개발 환경: Redis Cloud 사용');
-      } else if (isRender) {
+      } else if (isRender && process.env.DEBUG_REDIS) {
         console.log('🚀 Render 프로덕션 환경: Redis Cloud 사용');
-      } else {
+      } else if (process.env.DEBUG_REDIS) {
         console.log('🌐 기타 환경: Redis Cloud 사용');
       }
       
@@ -51,7 +51,9 @@ class CacheManager {
 
       // Redis 이벤트 핸들러
       this.redisClient.on('connect', () => {
-        console.log('✅ Redis 연결 성공');
+        if (process.env.DEBUG_REDIS) {
+          console.log('✅ Redis 연결 성공');
+        }
         this.isRedisConnected = true;
       });
 
@@ -79,7 +81,9 @@ class CacheManager {
       // Redis 우선 시도
       if (this.isRedisConnected && this.redisClient) {
         await this.redisClient.setEx(key, ttlSeconds, serializedData);
-        console.log(`📦 Redis 캐시 저장: ${key} (TTL: ${ttlSeconds}s)`);
+        if (process.env.DEBUG_CACHE) {
+          console.log(`📦 Redis 캐시 저장: ${key} (TTL: ${ttlSeconds}s)`);
+        }
       } else {
         // 메모리 캐시 폴백
         this.memoryCache.set(key, {
@@ -93,7 +97,9 @@ class CacheManager {
           this.memoryCache.delete(firstKey);
         }
         
-        console.log(`🧠 메모리 캐시 저장: ${key} (TTL: ${ttlSeconds}s)`);
+        if (process.env.DEBUG_CACHE) {
+          console.log(`🧠 메모리 캐시 저장: ${key} (TTL: ${ttlSeconds}s)`);
+        }
       }
     } catch (error) {
       console.warn('캐시 저장 실패:', key, error.message);
@@ -111,7 +117,9 @@ class CacheManager {
       if (this.isRedisConnected && this.redisClient) {
         const cached = await this.redisClient.get(key);
         if (cached) {
-          console.log(`📦 Redis 캐시 히트: ${key}`);
+          if (process.env.DEBUG_CACHE) {
+            console.log(`📦 Redis 캐시 히트: ${key}`);
+          }
           return JSON.parse(cached);
         }
       }
@@ -120,7 +128,9 @@ class CacheManager {
       const memoryCached = this.memoryCache.get(key);
       if (memoryCached) {
         if (allowExpired || memoryCached.expiry > Date.now()) {
-          console.log(`🧠 메모리 캐시 히트: ${key}`);
+          if (process.env.DEBUG_CACHE) {
+            console.log(`🧠 메모리 캐시 히트: ${key}`);
+          }
           return JSON.parse(memoryCached.data);
         } else {
           // 만료된 캐시 삭제
@@ -128,7 +138,9 @@ class CacheManager {
         }
       }
       
-      console.log(`❌ 캐시 미스: ${key}`);
+      if (process.env.DEBUG_CACHE) {
+        console.log(`❌ 캐시 미스: ${key}`);
+      }
       return null;
     } catch (error) {
       console.warn('캐시 조회 실패:', key, error.message);
@@ -141,12 +153,16 @@ class CacheManager {
       // Redis에서 삭제
       if (this.isRedisConnected && this.redisClient) {
         await this.redisClient.del(key);
-        console.log(`📦 Redis 캐시 삭제: ${key}`);
+        if (process.env.DEBUG_CACHE) {
+          console.log(`📦 Redis 캐시 삭제: ${key}`);
+        }
       }
       
       // 메모리 캐시에서도 삭제
       this.memoryCache.delete(key);
-      console.log(`🧠 메모리 캐시 삭제: ${key}`);
+      if (process.env.DEBUG_CACHE) {
+        console.log(`🧠 메모리 캐시 삭제: ${key}`);
+      }
     } catch (error) {
       console.warn('캐시 삭제 실패:', key, error.message);
     }
@@ -165,7 +181,9 @@ class CacheManager {
             await this.redisClient.del(keys);
           }
         }
-        console.log(`📦 Redis 캐시 삭제: ${pattern}`);
+        if (process.env.DEBUG_CACHE) {
+          console.log(`📦 Redis 캐시 삭제: ${pattern}`);
+        }
       }
       
       // 메모리 캐시 삭제
@@ -178,7 +196,9 @@ class CacheManager {
           }
         }
       }
-      console.log(`🧠 메모리 캐시 삭제: ${pattern}`);
+      if (process.env.DEBUG_CACHE) {
+        console.log(`🧠 메모리 캐시 삭제: ${pattern}`);
+      }
     } catch (error) {
       console.warn('캐시 전체 삭제 실패:', error.message);
     }

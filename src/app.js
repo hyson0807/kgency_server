@@ -54,7 +54,7 @@ app.use((req, res) => {
     const isMobileApp = userAgent.includes('Expo') || userAgent.includes('CFNetwork') ||
                        userAgent.includes('Darwin') || origin.includes('localhost');
 
-    if (isTestFlight || isMobileApp) {
+    if ((isTestFlight || isMobileApp) && process.env.DEBUG_404) {
         console.error(`
 ╔══════════════════════════════════════════════════════════════════
 ║ ❌ 404 ERROR FROM MOBILE/TESTFLIGHT
@@ -72,6 +72,8 @@ app.use((req, res) => {
 ║    - DELETE /api/auth/delete-account
 ╚══════════════════════════════════════════════════════════════════
         `);
+    } else if (isTestFlight || isMobileApp) {
+        console.error(`❌ 404 Error: ${req.method} ${req.url} from mobile app`);
     }
 
     res.status(404).json({

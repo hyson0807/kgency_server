@@ -68,9 +68,11 @@ class PurchaseService {
         scopes: ['https://www.googleapis.com/auth/androidpublisher']
       });
       
-      console.log('✅ Google Auth 환경변수 기반 인증 초기화 성공');
-      console.log('Service Account Email:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
-      console.log('Private Key Length:', privateKey.length);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('✅ Google Auth 환경변수 기반 인증 초기화 성공');
+        console.log('Service Account Email:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+        console.log('Private Key Length:', privateKey.length);
+      }
       
     } catch (error) {
       console.error('❌ Google Auth 초기화 실패:', error.message);

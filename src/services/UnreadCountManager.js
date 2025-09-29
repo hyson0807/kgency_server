@@ -37,7 +37,9 @@ class UnreadCountManager {
             });
 
             this.redis.on('connect', () => {
-                console.log('✅ Redis 연결 성공 (UnreadCountManager)');
+                if (process.env.DEBUG_REDIS) {
+                    console.log('✅ Redis 연결 성공 (UnreadCountManager)');
+                }
             });
 
             await this.redis.connect();
@@ -65,7 +67,9 @@ class UnreadCountManager {
             const total = await this.getTotalUnreadCount(userId);
             await this.redis.hSet(`user:${userId}:unread_counts`, 'total', total.toString());
             
-            console.log(`📈 Redis 카운트 증가: ${userId} → 룸 ${roomId} (+${increment}) → 총 ${total}`);
+            if (process.env.DEBUG_CACHE) {
+                console.log(`📈 Redis 카운트 증가: ${userId} → 룸 ${roomId} (+${increment}) → 총 ${total}`);
+            }
             return total;
 
         } catch (error) {
@@ -92,7 +96,9 @@ class UnreadCountManager {
             const total = await this.getTotalUnreadCount(userId);
             await this.redis.hSet(`user:${userId}:unread_counts`, 'total', total.toString());
             
-            console.log(`📉 Redis 카운트 감소: ${userId} → 룸 ${roomId} (-${decrement}) → 총 ${total}`);
+            if (process.env.DEBUG_CACHE) {
+                console.log(`📉 Redis 카운트 감소: ${userId} → 룸 ${roomId} (-${decrement}) → 총 ${total}`);
+            }
             return total;
 
         } catch (error) {
@@ -115,7 +121,9 @@ class UnreadCountManager {
             const total = await this.getTotalUnreadCount(userId);
             await this.redis.hSet(`user:${userId}:unread_counts`, 'total', total.toString());
             
-            console.log(`🔄 Redis 카운트 리셋: ${userId} → 룸 ${roomId} → 총 ${total}`);
+            if (process.env.DEBUG_CACHE) {
+                console.log(`🔄 Redis 카운트 리셋: ${userId} → 룸 ${roomId} → 총 ${total}`);
+            }
             return total;
 
         } catch (error) {
@@ -173,7 +181,9 @@ class UnreadCountManager {
      */
     async syncFromDatabase(userId) {
         try {
-            console.log(`🔄 DB 동기화 시작: ${userId}`);
+            if (process.env.DEBUG_CACHE) {
+                console.log(`🔄 DB 동기화 시작: ${userId}`);
+            }
 
             const { data: rooms, error } = await this.supabase
                 .from('chat_rooms')
@@ -212,7 +222,9 @@ class UnreadCountManager {
                 for (const [key, value] of Object.entries(counts)) {
                     await this.redis.hSet(`user:${userId}:unread_counts`, key, value);
                 }
-                console.log(`✅ Redis 동기화 완료: ${userId} → 총 ${total}`);
+                if (process.env.DEBUG_CACHE) {
+                    console.log(`✅ Redis 동기화 완료: ${userId} → 총 ${total}`);
+                }
             }
             
             return total;
@@ -259,7 +271,9 @@ class UnreadCountManager {
             if (!this.redis) return;
             
             await this.redis.del(`user:${userId}:unread_counts`);
-            console.log(`🗑️ 사용자 카운트 데이터 삭제: ${userId}`);
+            if (process.env.DEBUG_CACHE) {
+                console.log(`🗑️ 사용자 카운트 데이터 삭제: ${userId}`);
+            }
             
         } catch (error) {
             console.error('사용자 카운트 삭제 실패:', error);
