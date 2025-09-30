@@ -10,13 +10,10 @@ exports.getActiveJobPostings = async () => {
                     id,
                     name,
                     address,
-                    phone_number
-                ),
-                job_posting_keywords:job_posting_keyword (
-                    keyword:keyword_id (
-                        id,
-                        keyword,
-                        category
+                    phone_number,
+                    company_info!company_info_company_id_fkey (
+                        name,
+                        address
                     )
                 )
             `)
@@ -42,13 +39,10 @@ exports.getJobPostingById = async (postingId) => {
                     id,
                     name,
                     address,
-                    phone_number
-                ),
-                job_posting_keywords:job_posting_keyword (
-                    keyword:keyword_id (
-                        id,
-                        keyword,
-                        category
+                    phone_number,
+                    company_info!company_info_company_id_fkey (
+                        name,
+                        address
                     )
                 )
             `)
