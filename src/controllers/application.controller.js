@@ -103,16 +103,16 @@ exports.createApplication = async (req, res) => {
                 .single();
 
             if (!dataError && applicationData) {
-                // 회사에게 새로운 채팅지원 알림 발송
-                await notificationService.sendNewApplicationNotification(
-                    companyId,
-                    applicationData.user.name,
-                    applicationData.job_posting.title,
-                    'chat',
-                    applicationData.id,
-                    applicationData.job_posting.id
-                );
-                console.log('New chat application notification sent to company');
+                // 새로운 지원자 알림 기능 제거 - 채팅 알림만 사용
+                // await notificationService.sendNewApplicationNotification(
+                //     companyId,
+                //     applicationData.user.name,
+                //     applicationData.job_posting.title,
+                //     'chat',
+                //     applicationData.id,
+                //     applicationData.job_posting.id
+                // );
+                // console.log('New chat application notification sent to company');
             }
         } catch (notificationError) {
             // 알림 발송 실패해도 지원서 생성은 성공으로 처리
@@ -219,16 +219,16 @@ exports.createInstantInterviewApplication = async (req, res) => {
                 .single();
 
             if (!dataError && applicationData) {
-                // 회사에게 새로운 즉시면접 지원 알림 발송
-                await notificationService.sendNewApplicationNotification(
-                    companyId,
-                    applicationData.user.name,
-                    applicationData.job_posting.title,
-                    'instant_interview',
-                    applicationData.id,
-                    applicationData.job_posting.id
-                );
-                console.log('New instant interview application notification sent to company');
+                // 새로운 지원자 알림 기능 제거 - 채팅 알림만 사용
+                // await notificationService.sendNewApplicationNotification(
+                //     companyId,
+                //     applicationData.user.name,
+                //     applicationData.job_posting.title,
+                //     'instant_interview',
+                //     applicationData.id,
+                //     applicationData.job_posting.id
+                // );
+                // console.log('New instant interview application notification sent to company');
             }
         } catch (notificationError) {
             // 알림 발송 실패해도 지원서 생성은 성공으로 처리

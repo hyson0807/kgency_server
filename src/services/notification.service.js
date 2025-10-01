@@ -75,30 +75,31 @@ class NotificationService {
 
 
 
-  /**
-   * Send new application notification to company
-   * @param {string} companyId - Company ID who will receive the notification
-   * @param {string} userName - Name of the user who applied
-   * @param {string} jobTitle - Job title
-   * @param {string} applicationType - Type of application ('instant_interview', 'regular')
-   * @param {string} applicationId - Application ID for navigation
-   * @param {string} jobPostingId - Job posting ID for navigation
-   */
-  async sendNewApplicationNotification(companyId, userName, jobTitle, applicationType, applicationId, jobPostingId) {
-    const typeText = applicationType === 'instant_interview' ? '즉시면접' : '일반';
-    const title = '새로운 지원자가 있습니다!';
-    const body = `${userName}님이 ${jobTitle} 포지션에 ${typeText} 지원했습니다.`;
-    const data = {
-      type: 'new_application',
-      applicationId,
-      jobPostingId,
-      userName,
-      jobTitle,
-      applicationType,
-    };
+  // 새로운 지원자 알림 기능 제거됨 - 채팅 알림만 사용
+  // /**
+  //  * Send new application notification to company
+  //  * @param {string} companyId - Company ID who will receive the notification
+  //  * @param {string} userName - Name of the user who applied
+  //  * @param {string} jobTitle - Job title
+  //  * @param {string} applicationType - Type of application ('instant_interview', 'regular')
+  //  * @param {string} applicationId - Application ID for navigation
+  //  * @param {string} jobPostingId - Job posting ID for navigation
+  //  */
+  // async sendNewApplicationNotification(companyId, userName, jobTitle, applicationType, applicationId, jobPostingId) {
+  //   const typeText = applicationType === 'instant_interview' ? '즉시면접' : '일반';
+  //   const title = '새로운 지원자가 있습니다!';
+  //   const body = `${userName}님이 ${jobTitle} 포지션에 ${typeText} 지원했습니다.`;
+  //   const data = {
+  //     type: 'new_application',
+  //     applicationId,
+  //     jobPostingId,
+  //     userName,
+  //     jobTitle,
+  //     applicationType,
+  //   };
 
-    return await this.sendToUser(companyId, title, body, data);
-  }
+  //   return await this.sendToUser(companyId, title, body, data);
+  // }
 
 
 
