@@ -16,6 +16,7 @@ const chatRoutes = require('./chat.routes');
 const audioRoutes = require('./audio.routes');
 const companyRoutes = require('./company.routes');
 const jobSeekersRoutes = require('./job-seekers.routes');
+const promotionRoutes = require('./promotion.routes');
 const healthController = require('../controllers/health.controller');
 
 // 헬스 체크
@@ -64,6 +65,9 @@ router.use('/company', companyRoutes);
 
 // 구직자 라우트 추가
 router.use('/job-seekers', jobSeekersRoutes);
+
+// 프로모션 코드 라우트 추가
+router.use('/promotion', promotionRoutes);
 
 // 404 처리
 router.use((req, res) => {
