@@ -189,7 +189,9 @@ const getMatchedJobSeekers = async (req, res) => {
                     age,
                     gender,
                     visa,
-                    korean_level
+                    korean_level,
+                    country,
+                    university
                 )
             `)
             .eq('user_type', 'user')
@@ -233,7 +235,19 @@ const getUserProfile = async (req, res) => {
 
         const { data: profileData, error } = await supabase
             .from('profiles')
-            .select('id, name, user_type, profile_image_url')
+            .select(`
+                *,
+                user_info!user_info_user_id_fkey (
+                    age,
+                    gender,
+                    visa,
+                    korean_level,
+                    country,
+                    university,
+                    preferred_times,
+                    experience
+                )
+            `)
             .eq('id', userId)
             .single();
 

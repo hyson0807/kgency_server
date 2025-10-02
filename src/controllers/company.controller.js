@@ -95,15 +95,67 @@ const getTokenInfo = async (req, res) => {
  * 토큰 사용 (프로필 열람 등)
  */
 const spendTokens = async (req, res) => {
+  console.log('🔵 spendTokens called:', {
+    companyId: req.user.userId,
+    body: req.body
+  });
+
   try {
     const companyId = req.user.userId;
     const { amount, purpose, target_id } = req.body;
+
+    console.log('🔵 Processing spend:', { companyId, amount, purpose, target_id });
 
     if (!amount || amount <= 0) {
       return res.status(400).json({
         success: false,
         error: '올바른 토큰 수량을 입력해주세요.'
       });
+    }
+
+    // 프로필 열람의 경우 중복 결제 방지 - 토큰 차감 전에 확인
+    if (purpose === 'profile_unlock' && target_id) {
+      let userId;
+
+      // 급구 기능인 경우 (target_id가 urgent_ prefix로 시작)
+      if (target_id.startsWith('urgent_')) {
+        userId = target_id.replace('urgent_', '');
+      } else {
+        // 일반 지원서 기반 프로필 열람
+        const { data: application, error: appFetchError } = await supabase
+          .from('applications')
+          .select('user_id')
+          .eq('id', target_id)
+          .eq('company_id', companyId)
+          .single();
+
+        if (appFetchError || !application) {
+          console.error('Application fetch error:', appFetchError);
+          return res.status(400).json({
+            success: false,
+            error: '지원서 정보를 찾을 수 없습니다.'
+          });
+        }
+
+        userId = application.user_id;
+      }
+
+      // 이미 unlock되었는지 확인
+      const { data: existingUnlock } = await supabase
+        .from('company_unlocked_profiles')
+        .select('id')
+        .eq('company_id', companyId)
+        .eq('user_id', userId)
+        .single();
+
+      if (existingUnlock) {
+        console.log(`Profile already unlocked for company ${companyId} and user ${userId}`);
+        return res.status(200).json({
+          success: true,
+          message: '이미 열람한 프로필입니다.',
+          alreadyUnlocked: true
+        });
+      }
     }
 
     // 현재 토큰 잔액 확인
@@ -129,24 +181,43 @@ const spendTokens = async (req, res) => {
     }
 
     // 트랜잭션 ID 생성 (UUID 형식으로)
+    // reference_id는 UUID 타입이므로, 급구 기능의 경우 null로 설정
+    const isUrgentHiring = target_id && target_id.startsWith('urgent_');
+    const actualReferenceId = isUrgentHiring ? null : target_id;
+
     const { data: transactionData, error: transactionInsertError } = await supabase
       .from('token_transactions')
       .insert({
         user_id: companyId,
         amount: -amount, // 사용은 음수로 기록
         type: 'spend',
-        reference_id: target_id,
-        description: purpose === 'profile_unlock' ? '프로필 열람' : purpose,
-        metadata: { purpose, target_id }
+        reference_id: actualReferenceId,
+        description: purpose === 'profile_unlock'
+          ? (isUrgentHiring ? `프로필 열람 (급구 - ${target_id})` : '프로필 열람')
+          : purpose
       })
       .select('id')
       .single();
 
     if (transactionInsertError) {
-      console.error('Token transaction insert error:', transactionInsertError);
+      console.error('Token transaction insert error:', {
+        error: transactionInsertError,
+        message: transactionInsertError.message,
+        details: transactionInsertError.details,
+        hint: transactionInsertError.hint,
+        code: transactionInsertError.code,
+        data: {
+          user_id: companyId,
+          amount: -amount,
+          type: 'spend',
+          reference_id: target_id,
+          description: purpose === 'profile_unlock' ? '프로필 열람' : purpose
+        }
+      });
       return res.status(500).json({
         success: false,
-        error: '토큰 사용 기록 저장 중 오류가 발생했습니다.'
+        error: '토큰 사용 기록 저장 중 오류가 발생했습니다.',
+        debug: process.env.NODE_ENV === 'development' ? transactionInsertError.message : undefined
       });
     }
 
@@ -171,20 +242,30 @@ const spendTokens = async (req, res) => {
 
     // 프로필 열람의 경우 처리
     if (purpose === 'profile_unlock' && target_id) {
-      // 먼저 application에서 user_id를 가져옴
-      const { data: application, error: appFetchError } = await supabase
-        .from('applications')
-        .select('user_id')
-        .eq('id', target_id)
-        .eq('company_id', companyId)
-        .single();
+      let userId;
 
-      if (appFetchError || !application) {
-        console.error('Application fetch error:', appFetchError);
-        return res.status(500).json({
-          success: false,
-          error: '지원서 정보를 찾을 수 없습니다.'
-        });
+      // 급구 기능인 경우 (target_id가 urgent_ prefix로 시작)
+      if (target_id.startsWith('urgent_')) {
+        userId = target_id.replace('urgent_', '');
+        console.log(`Urgent hiring profile unlock for user ${userId}`);
+      } else {
+        // 일반 지원서 기반 프로필 열람
+        const { data: application, error: appFetchError } = await supabase
+          .from('applications')
+          .select('user_id')
+          .eq('id', target_id)
+          .eq('company_id', companyId)
+          .single();
+
+        if (appFetchError || !application) {
+          console.error('Application fetch error:', appFetchError);
+          return res.status(500).json({
+            success: false,
+            error: '지원서 정보를 찾을 수 없습니다.'
+          });
+        }
+
+        userId = application.user_id;
       }
 
       // company_unlocked_profiles 테이블에 기록
@@ -192,7 +273,7 @@ const spendTokens = async (req, res) => {
         .from('company_unlocked_profiles')
         .insert({
           company_id: companyId,
-          user_id: application.user_id,
+          user_id: userId,
           unlocked_at: new Date().toISOString(),
           token_transaction_id: transactionId
         });
@@ -208,8 +289,7 @@ const spendTokens = async (req, res) => {
         }
       }
 
-
-      console.log(`Profile unlocked for company ${companyId} and user ${application.user_id}`);
+      console.log(`Profile unlocked for company ${companyId} and user ${userId}`);
     }
 
     res.json({
@@ -542,6 +622,53 @@ const getApplicantProfile = async (req, res) => {
 };
 
 /**
+ * 프로필 열람 상태 확인
+ */
+const getProfileUnlockStatus = async (req, res) => {
+  try {
+    const companyId = req.user.userId;
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: '사용자 ID가 필요합니다.'
+      });
+    }
+
+    // company_unlocked_profiles 테이블에서 확인
+    const { data: unlockedProfile, error } = await supabase
+      .from('company_unlocked_profiles')
+      .select('unlocked_at')
+      .eq('company_id', companyId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('Profile unlock status check error:', error);
+      return res.status(500).json({
+        success: false,
+        error: '프로필 열람 상태 확인 중 오류가 발생했습니다.'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        isUnlocked: !!unlockedProfile,
+        unlockedAt: unlockedProfile?.unlocked_at || null
+      }
+    });
+  } catch (error) {
+    console.error('Get profile unlock status error:', error);
+    res.status(500).json({
+      success: false,
+      error: '프로필 열람 상태 확인 중 오류가 발생했습니다.'
+    });
+  }
+};
+
+/**
  * 회사 온보딩 완료
  */
 const completeCompanyOnboarding = async (req, res) => {
@@ -680,5 +807,6 @@ module.exports = {
   getApplicants,
   getApplicantProfile,
   getApplicationByRoom,
+  getProfileUnlockStatus,
   completeCompanyOnboarding
 };
