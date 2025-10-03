@@ -16,6 +16,12 @@ const generateOTP = () => {
 
 // OTP 발송
 const sendOTP = async (phone) => {
+    // CS 계정은 고정 OTP를 사용하므로 SMS 발송하지 않음
+    if (phone === '+821077777777') {
+        console.log('CS 계정: SMS 발송 건너뜀 (고정 OTP 사용)');
+        return { success: true, message: 'CS 계정은 고정 OTP를 사용합니다' };
+    }
+
     const otp = generateOTP();
     otpStore.set(phone, { otp, expires: Date.now() + 300000 }); // 5분
 
@@ -34,6 +40,18 @@ const sendOTP = async (phone) => {
 // OTP 검증 및 인증
 const verifyOTP = async (phone, otp, userType, isDemoAccount = false) => {
     console.log('OTP 검증:', phone, otp, userType, isDemoAccount);
+
+    // CS 고객센터 계정 처리 (고정 OTP)
+    const CS_ACCOUNT = {
+        phone: '+821077777777',
+        name: 'K-gency 고객센터',
+        type: 'company',
+        validOtp: '123456'
+    };
+
+    if (phone === CS_ACCOUNT.phone && otp === CS_ACCOUNT.validOtp && userType === CS_ACCOUNT.type) {
+        return handleCSAccount(CS_ACCOUNT);
+    }
 
     // 애플 심사용 데모 계정 처리
     const demoAccounts = {
@@ -81,6 +99,43 @@ const verifyOTP = async (phone, otp, userType, isDemoAccount = false) => {
 
     // 실제 인증 처리
     return handleAuthentication(phone, userType);
+};
+
+// CS 고객센터 계정 처리
+const handleCSAccount = async (csInfo) => {
+    const csPhone = csInfo.phone;
+
+    const { data: existingUser } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('phone_number', csPhone)
+        .single();
+
+    if (existingUser) {
+        // CS 계정 로그인
+        const token = jwt.sign({
+            userId: existingUser.id,
+            phone: csPhone,
+            userType: csInfo.type
+        }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+        return {
+            token,
+            user: {
+                userId: existingUser.id,
+                phone: csPhone,
+                userType: csInfo.type,
+                isNewUser: false
+            },
+            onboardingStatus: {
+                completed: existingUser.onboarding_completed || false
+            },
+            message: 'CS 계정으로 로그인되었습니다'
+        };
+    }
+
+    // CS 계정이 없으면 생성 (최초 1회)
+    return createNewUser(csPhone, csInfo.type, csInfo.name);
 };
 
 // 애플 심사용 데모 계정 처리

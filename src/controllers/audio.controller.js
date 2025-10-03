@@ -1,23 +1,9 @@
 const { s3, S3_BUCKET, S3_AUDIO_PREFIX, isConfigured } = require('../config/s3.config');
-// DEPRECATED: S3_AUDIO_AI_PREFIX, S3_AUDIO_MERGED_PREFIX - 더이상 사용안함
 const { supabase } = require('../config/database');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const path = require('path');
-// DEPRECATED: ffmpeg, fs, uuid - 오디오 병합 기능 제거로 더이상 사용안함
-// const ffmpeg = require('fluent-ffmpeg');
-// const fs = require('fs');
-// const { v4: uuidv4 } = require('uuid');
 
-/*
-// DEPRECATED: FFmpeg 설정 코드 (오디오 병합 기능 제거로 더이상 필요없음)
-const setFFmpegPath = () => {
-  // ... (기존 FFmpeg 설정 코드들)
-};
-
-// FFmpeg 경로 초기화
-setFFmpegPath();
-*/
 
 // S3 업로드 설정 (한국어 테스트 전용)
 const upload = multer({
