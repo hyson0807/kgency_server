@@ -112,19 +112,21 @@ class NotificationService {
    * @param {string} messageContent - Content of the message (truncated for privacy)
    * @param {string} roomId - Chat room ID for navigation
    * @param {number} totalUnreadCount - Total unread message count for badge
+   * @param {boolean} isCS - Whether this is a CS (customer service) chat
    */
-  async sendChatMessageNotification(userId, senderName, messageContent, roomId, totalUnreadCount = null) {
+  async sendChatMessageNotification(userId, senderName, messageContent, roomId, totalUnreadCount = null, isCS = false) {
     try {
       const title = senderName || '새 메시지';
       // Truncate message for privacy and notification size limit
-      const truncatedMessage = messageContent.length > 100 
-        ? messageContent.substring(0, 97) + '...' 
+      const truncatedMessage = messageContent.length > 100
+        ? messageContent.substring(0, 97) + '...'
         : messageContent;
       const body = truncatedMessage;
       const data = {
         type: 'chat_message',
         roomId,
         senderName,
+        isCS, // CS 채팅 여부 플래그 추가
       };
 
       // Get badge count if not provided

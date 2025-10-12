@@ -335,6 +335,9 @@ class ChatSocketHandler {
   // 채팅 푸시 알림 전송 (중복 카운트 방지 로직 포함)
   async sendChatPushNotification(senderId, receiverId, messageContent, roomId) {
     try {
+      // CS 계정 ID (고정값)
+      const CS_ACCOUNT_ID = 'a0000000-0000-4000-8000-000000000001';
+
       // 발신자 정보 조회
       const { data: sender, error: senderError } = await supabase
         .from('profiles')
@@ -348,7 +351,10 @@ class ChatSocketHandler {
       }
 
       const senderName = sender?.name || '알 수 없는 사용자';
-      
+
+      // CS 채팅인지 확인 (발신자가 CS 계정인 경우)
+      const isCS = senderId === CS_ACCOUNT_ID;
+
       // 🔧 현재 총 안읽은 메시지 카운트 조회 (Redis에서)
       let totalUnreadCount = 1; // 기본값: 적어도 1개는 있다고 가정
       try {
@@ -357,18 +363,19 @@ class ChatSocketHandler {
       } catch (error) {
         console.error('Redis에서 안읽은 카운트 조회 실패, 기본값 사용:', error);
       }
-      
-      // 푸시 알림 전송 (배지 카운트 포함)
+
+      // 푸시 알림 전송 (배지 카운트 및 CS 플래그 포함)
       const notificationSent = await notificationService.sendChatMessageNotification(
         receiverId,
         senderName,
         messageContent,
         roomId,
-        totalUnreadCount // 🔧 배지 카운트 전달
+        totalUnreadCount, // 🔧 배지 카운트 전달
+        isCS // 🔧 CS 채팅 플래그 전달
       );
 
       if (notificationSent) {
-        console.log(`채팅 푸시 알림 전송 완료: ${senderName} -> ${receiverId}`);
+        console.log(`채팅 푸시 알림 전송 완료: ${senderName} -> ${receiverId} (CS: ${isCS})`);
       } else {
         console.log(`채팅 푸시 알림 전송 실패: ${receiverId}의 푸시 토큰이 없음`);
       }
